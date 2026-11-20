@@ -15,6 +15,16 @@ public:
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+
+    struct Choice
+    {
+        juce::ComboBox box;
+        juce::Label label;
+        std::unique_ptr<ComboBoxAttachment> attachment;
+    };
+
+    void setupChoice (Choice&, const juce::String& paramId, const juce::String& name);
 
     struct Knob
     {
@@ -25,7 +35,8 @@ private:
 
     void setupKnob (Knob&, const juce::String& paramId, const juce::String& name);
 
-    // Garde le menu de presets aligné si Logic change de preset
+    // Garde le menu de presets aligné si Logic change de preset,
+    // échange Shift ↔ Interval selon le mode et affiche la note reconnue
     void timerCallback() override;
 
     HarmonizerProcessor& harmonizer;
@@ -37,7 +48,13 @@ private:
     Knob bShift, bFine, bDelay, bLevel;
     Knob splice, feedback, spread, mix;
 
-    juce::Label rowLabels[3];
+    // Diatonic Shift : à la place de Shift, l'intervalle en crans de gamme
+    Knob aInterval, bInterval;
+    Choice mode, key, scale;
+    juce::Label noteDisplay;
+    bool showingDiatonic = false;
+
+    juce::Label rowLabels[4];
 
     // Menu Input : masqué quand l'effet est dans Simple Chain (c'est la chaîne qui choisit)
     std::unique_ptr<InputMode::Box> inputBox;

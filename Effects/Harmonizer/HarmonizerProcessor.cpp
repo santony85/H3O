@@ -10,6 +10,9 @@ namespace
         float aSemi, aCents, aDelay, aLevel;   // voix A (à gauche)
         float bSemi, bCents, bDelay, bLevel;   // voix B (à droite)
         float splice, feedback, spread, mix;
+        // Diatonic Shift : mode (0 = Chromatic, 1 = Diatonic), tonalité (0 = C … 11 = B),
+        // gamme (index dans DiatonicScale::scales()), intervalles des voix en crans de gamme
+        int mode = 0, key = 4, scale = 1, aDegrees = 2, bDegrees = 4;
     };
 
     constexpr Preset presets[] = {
@@ -23,9 +26,50 @@ namespace
         { "Major 3rd + 5th",          4,  0, 10, 100,    7,  0, 15, 100,   50,  0,  60, 45 },
         // Octaves qui montent en cascade grâce au feedback
         { "Octave Cascade",          12,  0, 80,  90,   12,  0, 100, 90,   65, 55, 100, 40 },
+
+        // --- Diatonic Shift : les intervalles suivent la gamme choisie ---
+        // Tierce + quinte « dans la gamme » en mi mineur : l'harmonie à deux voix des solos
+        { "Diatonic: 3rd + 5th (E minor)", 0, 0, 10, 100,  0, 0, 15, 90,   50, 0, 60, 45,   1, 4, 1, +2, +4 },
+        // Une seule voix à la tierce, au centre : la twin guitar façon rock (la mineur)
+        { "Twin Lead: 3rd Above (A minor)", 0, 0, 12, 100,  0, 0, 10, 0,   50, 0,  0, 50,   1, 9, 1, +2,  0 },
+        // Tierces et sixtes en sol majeur
+        { "Diatonic: 3rds & 6ths (G major)", 0, 0, 10, 100,  0, 0, 18, 85,   50, 0, 70, 45,   1, 7, 0, +2, +5 },
+        // Tierce en dessous + octave au-dessus, en ré dorien
+        { "Diatonic: 3rd Below + Octave (D Dorian)", 0, 0, 10, 100, 0, 0, 10, 70, 60, 0, 80, 45,  1, 2, 3, -2, +7 },
     };
 
     constexpr int numPresets = (int) std::size (presets);
+
+    // +2 → "+3rd", -4 → "-5th", 7 → "+Oct", 0 → "Unison" (noms pour une gamme de 7 notes)
+    juce::String intervalName (int n)
+    {
+        if (n == 0)
+            return "Unison";
+
+        const juce::String sign = n > 0 ? "+" : "-";
+        const int a = std::abs (n);
+
+        if (a % 7 == 0)
+            return sign + (a == 7 ? "Oct" : juce::String (a / 7) + " Oct");
+
+        return sign + juce::String (a + 1) + DiatonicScale::ordinalSuffix (a + 1);
+    }
+
+    int intervalFromName (const juce::String& text)
+    {
+        const auto t = text.trim();
+        if (t.startsWithIgnoreCase ("uni"))
+            return 0;
+
+        const int sign = t.startsWithChar ('-') ? -1 : 1;
+        const auto body = t.trimCharactersAtStart ("+-").trim();
+
+        if (body.containsIgnoreCase ("oct"))
+            return sign * 7 * juce::jmax (1, body.getIntValue());
+
+        const int n = body.getIntValue();
+        return n <= 1 ? 0 : sign * (n - 1);
+    }
 
     juce::String voiceId (int voice, const char* name)
     {
@@ -47,7 +91,12 @@ HarmonizerProcessor::HarmonizerProcessor()
         voiceParams[v].cents     = parameters.getRawParameterValue (voiceId (v, "cents"));
         voiceParams[v].delayMs   = parameters.getRawParameterValue (voiceId (v, "delay"));
         voiceParams[v].level     = parameters.getRawParameterValue (voiceId (v, "level"));
+        voiceParams[v].degrees   = parameters.getRawParameterValue (voiceId (v, "degrees"));
     }
+
+    modeParam  = parameters.getRawParameterValue ("mode");
+    keyParam   = parameters.getRawParameterValue ("key");
+    scaleParam = parameters.getRawParameterValue ("scale");
 
     spliceParam   = parameters.getRawParameterValue ("splice");
     feedbackParam = parameters.getRawParameterValue ("feedback");
@@ -64,6 +113,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout HarmonizerProcessor::createP
 
     const auto& init = presets[0];   // valeurs par défaut = premier preset
 
+    // Diatonic Shift
+    layout.add (std::make_unique<AudioParameterChoice> (
+        ParameterID { "mode", 1 }, "Mode", StringArray { "Chromatic", "Diatonic" }, init.mode));
+
+    StringArray keys, scaleNames;
+    for (int k = 0; k < 12; ++k)
+        keys.add (DiatonicScale::noteName (k));
+    for (const auto& sc : DiatonicScale::scales())
+        scaleNames.add (sc.name);
+
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "key", 1 },   "Key",   keys,       init.key));
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "scale", 1 }, "Scale", scaleNames, init.scale));
+
     for (int v = 0; v < 2; ++v)
     {
         const String voice = v == 0 ? "A " : "B ";
@@ -72,6 +134,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout HarmonizerProcessor::createP
             ParameterID { voiceId (v, "semi"), 1 }, voice + "Shift", -24, 24,
             (int) (v == 0 ? init.aSemi : init.bSemi),
             AudioParameterIntAttributes().withLabel ("st")));
+
+        // Intervalle en crans de gamme : 0 = unisson, +2 = tierce au-dessus, -4 = quinte en dessous, 7 = octave
+        layout.add (std::make_unique<AudioParameterInt> (
+            ParameterID { voiceId (v, "degrees"), 1 }, voice + "Interval", -14, 14,
+            v == 0 ? init.aDegrees : init.bDegrees,
+            AudioParameterIntAttributes()
+                .withStringFromValueFunction ([] (int n, int) { return intervalName (n); })
+                .withValueFromStringFunction (intervalFromName)));
 
         layout.add (std::make_unique<AudioParameterFloat> (
             ParameterID { voiceId (v, "cents"), 1 }, voice + "Fine",
@@ -141,6 +211,11 @@ void HarmonizerProcessor::setCurrentProgram (int index)
     set ("feedback", p.feedback);
     set ("spread", p.spread);
     set ("mix", p.mix);
+    set ("mode", (float) p.mode);
+    set ("key", (float) p.key);
+    set ("scale", (float) p.scale);
+    set ("adegrees", (float) p.aDegrees);
+    set ("bdegrees", (float) p.bDegrees);
 }
 
 //==============================================================================
@@ -166,7 +241,13 @@ void HarmonizerProcessor::prepareToPlay (double sampleRate, int)
         smoothedLevel[v].reset (sampleRate, 0.02);
         smoothedDelay[v].setCurrentAndTargetValue (voiceParams[v].delayMs->load() * 0.001f * sr);
         smoothedLevel[v].setCurrentAndTargetValue (voiceParams[v].level->load() * 0.01f);
+        smoothedRatio[v].reset (sampleRate, 0.01);   // changement de note sans clic
+        smoothedRatio[v].setCurrentAndTargetValue (1.0f);
     }
+
+    detector.prepare (sampleRate);
+    tracker.reset();
+    detectedNote = -1;
 
     smoothedSplice.reset (sampleRate, 0.05);
     smoothedFeedback.reset (sampleRate, 0.02);
@@ -193,13 +274,26 @@ void HarmonizerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     input.process (buffer, numIn);
 
     const auto sr = (float) currentSampleRate;
-    float ratio[2];
+
+    const bool diatonic = isDiatonic();
+    const int key = juce::jlimit (0, 11, (int) keyParam->load());
+    const auto& scale = DiatonicScale::scales()[(size_t) juce::jlimit (0, (int) DiatonicScale::scales().size() - 1,
+                                                                       (int) scaleParam->load())];
+    if (diatonic)
+        updateDiatonicShifts (key, scale);   // avec la dernière note reconnue (ou la tonique au départ)
+
+    auto targetRatio = [this, diatonic] (int v)
+    {
+        // Demi-tons et cents → rapport de fréquence (1200 cents = une octave = ×2)
+        const float semis = diatonic ? (float) diatonicSemitones[v] : voiceParams[v].semitones->load();
+        return std::pow (2.0f, (semis * 100.0f + voiceParams[v].cents->load()) / 1200.0f);
+    };
 
     for (int v = 0; v < 2; ++v)
     {
-        // Demi-tons et cents → rapport de fréquence (1200 cents = une octave = ×2)
-        const float totalCents = voiceParams[v].semitones->load() * 100.0f + voiceParams[v].cents->load();
-        ratio[v] = std::pow (2.0f, totalCents / 1200.0f);
+        smoothedRatio[v].setTargetValue (targetRatio (v));
+        if (! diatonic)
+            voiceShift[v] = (int) voiceParams[v].semitones->load();
 
         smoothedDelay[v].setTargetValue (voiceParams[v].delayMs->load() * 0.001f * sr);
         smoothedLevel[v].setTargetValue (voiceParams[v].level->load() * 0.01f);
@@ -223,10 +317,25 @@ void HarmonizerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
         const float monoIn = 0.5f * (dryL + dryR);
         shifter.write (monoIn + smoothedFeedback.getNextValue() * feedbackSample);
 
+        // Diatonic : nouvelle mesure de hauteur toutes les ~5 ms → nouveaux intervalles.
+        // Le décalage s'applique à la hauteur réellement jouée : bends et vibrato sont conservés.
+        if (diatonic && detector.push (monoIn))
+        {
+            const int before = tracker.getNote();
+            tracker.update (detector.isVoiced() ? PitchDetector::toMidi (detector.getFrequency()) : -1.0f);
+
+            if (tracker.getNote() != before)
+            {
+                updateDiatonicShifts (key, scale);
+                for (int v = 0; v < 2; ++v)
+                    smoothedRatio[v].setTargetValue (targetRatio (v));
+            }
+        }
+
         const float window = smoothedSplice.getNextValue();
-        const float a = shifter.process (voiceState[0], ratio[0], smoothedDelay[0].getNextValue(), window)
+        const float a = shifter.process (voiceState[0], smoothedRatio[0].getNextValue(), smoothedDelay[0].getNextValue(), window)
                       * smoothedLevel[0].getNextValue();
-        const float b = shifter.process (voiceState[1], ratio[1], smoothedDelay[1].getNextValue(), window)
+        const float b = shifter.process (voiceState[1], smoothedRatio[1].getNextValue(), smoothedDelay[1].getNextValue(), window)
                       * smoothedLevel[1].getNextValue();
 
         feedbackSample = 0.5f * (a + b);
@@ -250,6 +359,21 @@ void HarmonizerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
             left[i] = dryL * (1.0f - mix) + 0.5f * (wetL + wetR) * mix;
         }
     }
+}
+
+void HarmonizerProcessor::updateDiatonicShifts (int key, const DiatonicScale::Scale& scale) noexcept
+{
+    const int note = tracker.getNote();
+    // Avant la première note : intervalles comptés depuis la tonique
+    const int reference = note >= 0 ? note : 60 + key;
+
+    for (int v = 0; v < 2; ++v)
+    {
+        diatonicSemitones[v] = DiatonicScale::semitonesFor (reference, key, scale, (int) voiceParams[v].degrees->load());
+        voiceShift[v] = diatonicSemitones[v];
+    }
+
+    detectedNote = note;
 }
 
 juce::AudioProcessorEditor* HarmonizerProcessor::createEditor()

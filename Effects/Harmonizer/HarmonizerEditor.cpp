@@ -27,13 +27,26 @@ HarmonizerEditor::HarmonizerEditor (HarmonizerProcessor& p)
     setupKnob (bDelay, "bdelay", "Delay");
     setupKnob (bLevel, "blevel", "Level");
 
+    setupKnob (aInterval, "adegrees", "Interval");
+    setupKnob (bInterval, "bdegrees", "Interval");
+
+    setupChoice (mode,  "mode",  "Mode");
+    setupChoice (key,   "key",   "Key");
+    setupChoice (scale, "scale", "Scale");
+
+    noteDisplay.setJustificationType (juce::Justification::centred);
+    noteDisplay.setColour (juce::Label::backgroundColourId, juce::Colour (0xff141518));
+    noteDisplay.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+    noteDisplay.setMinimumHorizontalScale (0.7f);
+    addAndMakeVisible (noteDisplay);
+
     setupKnob (splice,   "splice",   "Splice");
     setupKnob (feedback, "feedback", "Feedback");
     setupKnob (spread,   "spread",   "Spread");
     setupKnob (mix,      "mix",      "Mix");
 
-    const char* rowNames[] = { "VOICE A (L)", "VOICE B (R)", "GLOBAL" };
-    for (int r = 0; r < 3; ++r)
+    const char* rowNames[] = { "DIATONIC SHIFT", "VOICE A (L)", "VOICE B (R)", "GLOBAL" };
+    for (int r = 0; r < 4; ++r)
     {
         rowLabels[r].setText (rowNames[r], juce::dontSendNotification);
         rowLabels[r].setColour (juce::Label::textColourId, accent);
@@ -47,8 +60,23 @@ HarmonizerEditor::HarmonizerEditor (HarmonizerProcessor& p)
         addAndMakeVisible (*inputBox);
     }
 
-    setSize (600, 500);
-    startTimerHz (5);
+    setSize (600, 580);
+    timerCallback();
+    startTimerHz (10);
+}
+
+void HarmonizerEditor::setupChoice (Choice& choice, const juce::String& paramId, const juce::String& name)
+{
+    if (auto* param = dynamic_cast<juce::AudioParameterChoice*> (harmonizer.parameters.getParameter (paramId)))
+        choice.box.addItemList (param->choices, 1);
+
+    addAndMakeVisible (choice.box);
+
+    choice.label.setText (name, juce::dontSendNotification);
+    choice.label.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (choice.label);
+
+    choice.attachment = std::make_unique<ComboBoxAttachment> (harmonizer.parameters, paramId, choice.box);
 }
 
 void HarmonizerEditor::setupKnob (Knob& knob, const juce::String& paramId, const juce::String& name)
@@ -70,6 +98,50 @@ void HarmonizerEditor::timerCallback()
     const int id = harmonizer.getCurrentProgram() + 1;
     if (presetBox.getSelectedId() != id)
         presetBox.setSelectedId (id, juce::dontSendNotification);
+
+    // Shift (demi-tons fixes) ou Interval (crans de gamme) selon le mode
+    const bool diatonic = harmonizer.isDiatonic();
+    if (diatonic != showingDiatonic || aShift.slider.isVisible() == aInterval.slider.isVisible())
+    {
+        showingDiatonic = diatonic;
+        for (auto* k : { &aShift, &bShift })
+        {
+            k->slider.setVisible (! diatonic);
+            k->label.setVisible (! diatonic);
+        }
+        for (auto* k : { &aInterval, &bInterval })
+        {
+            k->slider.setVisible (diatonic);
+            k->label.setVisible (diatonic);
+        }
+        key.box.setEnabled (diatonic);
+        scale.box.setEnabled (diatonic);
+    }
+
+    // Note reconnue et notes produites par les voix : « E3  →  A: G3   B: B3 »
+    auto noteText = [] (int n) { return juce::String (DiatonicScale::noteName (n)) + juce::String (n / 12 - 1); };
+    juce::String text;
+    auto colour = juce::Colours::white;
+
+    if (! diatonic)
+    {
+        text = "Chromatic: fixed intervals";
+        colour = juce::Colours::grey;
+    }
+    else if (const int note = harmonizer.getDetectedNote(); note < 0)
+    {
+        text = "Play a note...";
+        colour = juce::Colours::grey;
+    }
+    else
+    {
+        text << noteText (note) << "   ->   A: " << noteText (note + harmonizer.getVoiceShift (0))
+             << "   B: " << noteText (note + harmonizer.getVoiceShift (1));
+        colour = accent.brighter (0.4f);
+    }
+
+    noteDisplay.setText (text, juce::dontSendNotification);
+    noteDisplay.setColour (juce::Label::textColourId, colour);
 }
 
 void HarmonizerEditor::paint (juce::Graphics& g)
@@ -91,6 +163,23 @@ void HarmonizerEditor::resized()
         inputBox->setBounds (header.removeFromRight (InputMode::Box::preferredWidth + 10).withTrimmedRight (10));
     area.removeFromTop (5);
 
+    // Rangée Diatonic Shift : Mode | Key | Scale | note reconnue
+    {
+        auto row = area.removeFromTop (70);
+        rowLabels[0].setBounds (row.removeFromTop (18));
+
+        const int w = row.getWidth() / 4;
+        for (auto* choice : { &mode, &key, &scale })
+        {
+            auto col = row.removeFromLeft (w).reduced (8, 0);
+            choice->label.setBounds (col.removeFromTop (18));
+            choice->box.setBounds (col.removeFromTop (26));
+        }
+        noteDisplay.setBounds (row.reduced (4, 0).withTrimmedTop (14).removeFromTop (34));
+        area.removeFromTop (6);
+    }
+
+    // Interval occupe la place de Shift (un seul des deux est visible)
     Knob* rows[3][4] = {
         { &aShift, &aFine, &aDelay, &aLevel },
         { &bShift, &bFine, &bDelay, &bLevel },
@@ -101,7 +190,7 @@ void HarmonizerEditor::resized()
     for (int r = 0; r < 3; ++r)
     {
         auto row = area.removeFromTop (rowHeight);
-        rowLabels[r].setBounds (row.removeFromTop (18));
+        rowLabels[r + 1].setBounds (row.removeFromTop (18));
 
         const int w = row.getWidth() / 4;
         for (auto* knob : rows[r])
@@ -111,4 +200,9 @@ void HarmonizerEditor::resized()
             knob->slider.setBounds (col.reduced (4, 0));
         }
     }
+
+    aInterval.label.setBounds (aShift.label.getBounds());
+    aInterval.slider.setBounds (aShift.slider.getBounds());
+    bInterval.label.setBounds (bShift.label.getBounds());
+    bInterval.slider.setBounds (bShift.slider.getBounds());
 }

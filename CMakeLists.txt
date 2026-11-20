@@ -75,6 +75,8 @@ set(DELAY_SOURCES
 set(HARMONIZER_SOURCES
     ${COMMON_SOURCES}
     ${EFFECTS_DIR}/Harmonizer/PitchShifter.h
+    ${EFFECTS_DIR}/Harmonizer/PitchDetector.h
+    ${EFFECTS_DIR}/Harmonizer/DiatonicScale.h
     ${EFFECTS_DIR}/Harmonizer/HarmonizerProcessor.h
     ${EFFECTS_DIR}/Harmonizer/HarmonizerProcessor.cpp
     ${EFFECTS_DIR}/Harmonizer/HarmonizerEditor.h
@@ -166,3 +168,19 @@ juce_add_console_app(PluginHostTest PRODUCT_NAME "PluginHostTest")
 target_sources(PluginHostTest PRIVATE Tests/PluginHostTest.cpp)
 target_compile_definitions(PluginHostTest PRIVATE JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(PluginHostTest PRIVATE juce::juce_audio_processors juce::juce_recommended_config_flags "-framework CoreAudioKit")
+
+#==============================================================================
+# Test du Diatonic Shift (gammes, détection de hauteur, chaîne complète) : cible DiatonicTest
+#==============================================================================
+add_executable(DiatonicTest Tests/DiatonicTest.cpp)
+target_include_directories(DiatonicTest PRIVATE ${EFFECTS_DIR}/Harmonizer)
+target_compile_features(DiatonicTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test de Simple Harmonizer complet (mode Diatonic, presets, état) : cible HarmonizerTest
+#==============================================================================
+juce_add_console_app(HarmonizerTest PRODUCT_NAME "HarmonizerTest")
+target_sources(HarmonizerTest PRIVATE Tests/HarmonizerTest.cpp ${HARMONIZER_SOURCES})
+target_include_directories(HarmonizerTest PRIVATE ${EFFECTS_DIR})
+target_compile_definitions(HarmonizerTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(HarmonizerTest PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
