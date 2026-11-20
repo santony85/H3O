@@ -1,4 +1,4 @@
-# Simple Chain : le multi-effets. Contient les effets en série (Amp → Harmonizer → Chorus → Delay).
+# Simple Chain : le multi-effets. Contient les effets en série (Amp → Harmonizer → Reverse → Chorus → Delay).
 # Utilisable comme plugin dans Logic ou comme application autonome.
 juce_add_plugin(SimpleChain
     COMPANY_NAME "Antony"
@@ -22,6 +22,7 @@ audiofx_setup_plugin(SimpleChain
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainEditor.cpp
     ${AMP_SOURCES}
     ${HARMONIZER_SOURCES}
+    ${REVERSE_SOURCES}
     ${CHORUS_SOURCES}
     ${DELAY_SOURCES})
 

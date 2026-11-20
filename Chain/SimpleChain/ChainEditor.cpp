@@ -8,6 +8,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     // Même ordre que le signal, mêmes couleurs que les interfaces des effets
     addPedal ("Amp",        juce::Colour (0xffe06040), chain.amp,        "ampon",        [this] { return chain.isAmpOn(); });
     addPedal ("Harmonizer", juce::Colour (0xff40b0e0), chain.harmonizer, "harmonizeron", [this] { return chain.isHarmonizerOn(); });
+    addPedal ("Reverse",    juce::Colour (0xff50c878), chain.reverse,    "reverseon",    [this] { return chain.isReverseOn(); });
     addPedal ("Chorus",     juce::Colour (0xffb070e0), chain.chorus,     "choruson",     [this] { return chain.isChorusOn(); });
     addPedal ("Delay",      juce::Colour (0xffe0a040), chain.delay,      "delayon",      [this] { return chain.isDelayOn(); });
 

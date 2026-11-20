@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Amp/AmpProcessor.h"
 #include "Harmonizer/HarmonizerProcessor.h"
+#include "Reverse/ReverseProcessor.h"
 #include "Chorus/ChorusProcessor.h"
 #include "Delay/DelayProcessor.h"
 
@@ -44,17 +45,20 @@ public:
     // Les effets, dans l'ordre du signal
     AmpProcessor amp;
     HarmonizerProcessor harmonizer;
+    ReverseProcessor reverse;
     ChorusProcessor chorus;
     DelayProcessor delay;
 
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
     bool isHarmonizerOn() const noexcept { return harmonizerOn->load() >= 0.5f; }
+    bool isReverseOn() const noexcept    { return reverseOn->load() >= 0.5f; }
     bool isChorusOn() const noexcept     { return chorusOn->load() >= 0.5f; }
     bool isDelayOn() const noexcept      { return delayOn->load() >= 0.5f; }
 
 private:
     std::atomic<float>* harmonizerOn = nullptr;
     std::atomic<float>* ampOn = nullptr;
+    std::atomic<float>* reverseOn = nullptr;
     std::atomic<float>* chorusOn = nullptr;
     std::atomic<float>* delayOn = nullptr;
 

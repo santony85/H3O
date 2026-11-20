@@ -98,6 +98,14 @@ set(CHORUS_SOURCES
     ${EFFECTS_DIR}/Chorus/ChorusEditor.h
     ${EFFECTS_DIR}/Chorus/ChorusEditor.cpp)
 
+set(REVERSE_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/Reverse/ReverseEngine.h
+    ${EFFECTS_DIR}/Reverse/ReverseProcessor.h
+    ${EFFECTS_DIR}/Reverse/ReverseProcessor.cpp
+    ${EFFECTS_DIR}/Reverse/ReverseEditor.h
+    ${EFFECTS_DIR}/Reverse/ReverseEditor.cpp)
+
 # Réglages communs à tous les plugins : sources, dossier "Source" dans Xcode, modules JUCE
 function(audiofx_setup_plugin target)
     set(sources ${ARGN})
@@ -129,6 +137,7 @@ add_subdirectory(Plugins/SimpleAmp)
 add_subdirectory(Plugins/SimpleDelay)
 add_subdirectory(Plugins/SimpleHarmonizer)
 add_subdirectory(Plugins/SimpleChorus)
+add_subdirectory(Plugins/SimpleReverse)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -184,3 +193,10 @@ target_sources(HarmonizerTest PRIVATE Tests/HarmonizerTest.cpp ${HARMONIZER_SOUR
 target_include_directories(HarmonizerTest PRIVATE ${EFFECTS_DIR})
 target_compile_definitions(HarmonizerTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(HarmonizerTest PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
+
+#==============================================================================
+# Test du moteur Reverse Shift, sans JUCE : cible ReverseTest
+#==============================================================================
+add_executable(ReverseTest Tests/ReverseTest.cpp)
+target_include_directories(ReverseTest PRIVATE ${EFFECTS_DIR}/Reverse)
+target_compile_features(ReverseTest PRIVATE cxx_std_17)
