@@ -6,6 +6,7 @@
 #include "Reverse/ReverseProcessor.h"
 #include "Chorus/ChorusProcessor.h"
 #include "Delay/DelayProcessor.h"
+#include "BandDelay/BandDelayProcessor.h"
 #include "UltraTap/UltraTapProcessor.h"
 
 // Multi-effets : fait passer le son dans chaque effet, l'un après l'autre.
@@ -49,6 +50,7 @@ public:
     ReverseProcessor reverse;
     ChorusProcessor chorus;
     DelayProcessor delay;
+    BandDelayProcessor bandDelay;
     UltraTapProcessor ultraTap;
 
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
@@ -56,6 +58,7 @@ public:
     bool isReverseOn() const noexcept    { return reverseOn->load() >= 0.5f; }
     bool isChorusOn() const noexcept     { return chorusOn->load() >= 0.5f; }
     bool isDelayOn() const noexcept      { return delayOn->load() >= 0.5f; }
+    bool isBandDelayOn() const noexcept  { return bandDelayOn->load() >= 0.5f; }
     bool isUltraTapOn() const noexcept   { return ultraTapOn->load() >= 0.5f; }
 
 private:
@@ -64,6 +67,7 @@ private:
     std::atomic<float>* reverseOn = nullptr;
     std::atomic<float>* chorusOn = nullptr;
     std::atomic<float>* delayOn = nullptr;
+    std::atomic<float>* bandDelayOn = nullptr;
     std::atomic<float>* ultraTapOn = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainProcessor)

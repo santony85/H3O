@@ -11,6 +11,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addPedal ("Reverse",    juce::Colour (0xff50c878), chain.reverse,    "reverseon",    [this] { return chain.isReverseOn(); });
     addPedal ("Chorus",     juce::Colour (0xffb070e0), chain.chorus,     "choruson",     [this] { return chain.isChorusOn(); });
     addPedal ("Delay",      juce::Colour (0xffe0a040), chain.delay,      "delayon",      [this] { return chain.isDelayOn(); });
+    addPedal ("Band Delay", juce::Colour (0xff40c0a0), chain.bandDelay,  "banddelayon",  [this] { return chain.isBandDelayOn(); });
     addPedal ("Ultra-Tap",  juce::Colour (0xffe05090), chain.ultraTap,   "ultratapon",   [this] { return chain.isUltraTapOn(); });
 
     // Assez de place pour la plus grande des interfaces
@@ -54,6 +55,7 @@ void ChainEditor::addPedal (const juce::String& name, juce::Colour colour, juce:
 
     pedal.selectButton = std::make_unique<juce::TextButton> (name);
     pedal.selectButton->setClickingTogglesState (false);
+    pedal.selectButton->setLookAndFeel (&pedalLook);
     pedal.selectButton->setColour (juce::TextButton::buttonOnColourId, colour.darker (0.3f));
     pedal.selectButton->onClick = [this, index] { select (index); };
     addAndMakeVisible (*pedal.selectButton);
@@ -103,7 +105,7 @@ void ChainEditor::paint (juce::Graphics& g)
         const auto next = pedals[i + 1].selectButton->getBounds().toFloat();
         const auto y    = b.getCentreY();
         g.setColour (juce::Colours::grey);
-        g.drawArrow ({ b.getRight() + 4.0f, y, next.getX() - 4.0f, y }, 2.0f, 9.0f, 8.0f);
+        g.drawArrow ({ b.getRight() + 2.0f, y, next.getX() - 2.0f, y }, 2.0f, 7.0f, 6.0f);
     }
 
     // Fine ligne de la couleur de la pédale affichée, au-dessus de ses réglages

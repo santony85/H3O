@@ -114,6 +114,14 @@ set(ULTRATAP_SOURCES
     ${EFFECTS_DIR}/UltraTap/UltraTapEditor.h
     ${EFFECTS_DIR}/UltraTap/UltraTapEditor.cpp)
 
+set(BANDDELAY_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/BandDelay/BandDelayEngine.h
+    ${EFFECTS_DIR}/BandDelay/BandDelayProcessor.h
+    ${EFFECTS_DIR}/BandDelay/BandDelayProcessor.cpp
+    ${EFFECTS_DIR}/BandDelay/BandDelayEditor.h
+    ${EFFECTS_DIR}/BandDelay/BandDelayEditor.cpp)
+
 # Réglages communs à tous les plugins : sources, dossier "Source" dans Xcode, modules JUCE
 function(audiofx_setup_plugin target)
     set(sources ${ARGN})
@@ -147,6 +155,7 @@ add_subdirectory(Plugins/SimpleHarmonizer)
 add_subdirectory(Plugins/SimpleChorus)
 add_subdirectory(Plugins/SimpleReverse)
 add_subdirectory(Plugins/SimpleUltraTap)
+add_subdirectory(Plugins/SimpleBandDelay)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -216,3 +225,23 @@ target_compile_features(ReverseTest PRIVATE cxx_std_17)
 add_executable(UltraTapTest Tests/UltraTapTest.cpp)
 target_include_directories(UltraTapTest PRIVATE ${EFFECTS_DIR}/UltraTap)
 target_compile_features(UltraTapTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du moteur Band Delay, sans JUCE : cible BandDelayTest
+#==============================================================================
+add_executable(BandDelayTest Tests/BandDelayTest.cpp)
+target_include_directories(BandDelayTest PRIVATE ${EFFECTS_DIR}/BandDelay)
+target_compile_features(BandDelayTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Images PNG des interfaces (vérification sans Logic) : cible EditorSnapshot
+#==============================================================================
+juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
+target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
+    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
+    ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES})
+target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
+target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
+audiofx_link_nam(EditorSnapshot)
+target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)

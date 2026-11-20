@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainProcessor.h"
 
-// Un pédalier : une rangée de pédales dans l'ordre du signal (Amp > Harmonizer > Reverse > Chorus > Delay > Ultra-Tap),
+// Un pédalier : une rangée de pédales dans l'ordre du signal (Amp > Harmonizer > Reverse > Chorus > Delay > Band Delay > Ultra-Tap),
 // chacune avec son interrupteur. Un clic sur le nom d'une pédale affiche ses réglages en dessous.
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer
@@ -39,12 +39,22 @@ private:
     ChainProcessor& chain;
     InputMode::Box inputBox { chain.parameters, juce::Colours::white };
 
+    // Police un peu plus petite pour les noms des pédales : 7 pédales tiennent sur 600 pixels
+    struct PedalLook : juce::LookAndFeel_V4
+    {
+        juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override
+        {
+            return juce::FontOptions (juce::jmin (13.0f, (float) buttonHeight * 0.6f));
+        }
+    };
+    PedalLook pedalLook;   // déclaré avant les pédales : détruit après leurs boutons
+
     std::vector<Pedal> pedals;
     int selected = 0;
 
     static constexpr int headerHeight = 40;   // titre + Input
     static constexpr int stripHeight  = 64;   // la rangée de pédales
-    static constexpr int arrowWidth   = 24;
+    static constexpr int arrowWidth   = 14;   // 7 pédales sur 600 pixels
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainEditor)
 };
