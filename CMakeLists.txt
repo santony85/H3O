@@ -122,6 +122,14 @@ set(BANDDELAY_SOURCES
     ${EFFECTS_DIR}/BandDelay/BandDelayEditor.h
     ${EFFECTS_DIR}/BandDelay/BandDelayEditor.cpp)
 
+set(REVERB_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/Reverb/ReverbEngine.h
+    ${EFFECTS_DIR}/Reverb/ReverbProcessor.h
+    ${EFFECTS_DIR}/Reverb/ReverbProcessor.cpp
+    ${EFFECTS_DIR}/Reverb/ReverbEditor.h
+    ${EFFECTS_DIR}/Reverb/ReverbEditor.cpp)
+
 # Réglages communs à tous les plugins : sources, dossier "Source" dans Xcode, modules JUCE
 function(audiofx_setup_plugin target)
     set(sources ${ARGN})
@@ -156,6 +164,7 @@ add_subdirectory(Plugins/SimpleChorus)
 add_subdirectory(Plugins/SimpleReverse)
 add_subdirectory(Plugins/SimpleUltraTap)
 add_subdirectory(Plugins/SimpleBandDelay)
+add_subdirectory(Plugins/SimpleReverb)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -240,8 +249,15 @@ juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
     Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
 target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+
+#==============================================================================
+# Mesures du moteur de réverbération, sans JUCE : cible ReverbTest
+#==============================================================================
+add_executable(ReverbTest Tests/ReverbTest.cpp)
+target_include_directories(ReverbTest PRIVATE ${EFFECTS_DIR}/Reverb)
+target_compile_features(ReverbTest PRIVATE cxx_std_17)

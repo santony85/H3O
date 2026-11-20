@@ -8,6 +8,7 @@
 #include "Delay/DelayProcessor.h"
 #include "BandDelay/BandDelayProcessor.h"
 #include "UltraTap/UltraTapProcessor.h"
+#include "Reverb/ReverbProcessor.h"
 
 // Multi-effets : fait passer le son dans chaque effet, l'un après l'autre.
 // Les effets sont les mêmes classes que dans les plugins séparés.
@@ -52,6 +53,7 @@ public:
     DelayProcessor delay;
     BandDelayProcessor bandDelay;
     UltraTapProcessor ultraTap;
+    ReverbProcessor reverb;
 
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
     bool isHarmonizerOn() const noexcept { return harmonizerOn->load() >= 0.5f; }
@@ -60,6 +62,7 @@ public:
     bool isDelayOn() const noexcept      { return delayOn->load() >= 0.5f; }
     bool isBandDelayOn() const noexcept  { return bandDelayOn->load() >= 0.5f; }
     bool isUltraTapOn() const noexcept   { return ultraTapOn->load() >= 0.5f; }
+    bool isReverbOn() const noexcept     { return reverbOn->load() >= 0.5f; }
 
 private:
     std::atomic<float>* harmonizerOn = nullptr;
@@ -69,6 +72,7 @@ private:
     std::atomic<float>* delayOn = nullptr;
     std::atomic<float>* bandDelayOn = nullptr;
     std::atomic<float>* ultraTapOn = nullptr;
+    std::atomic<float>* reverbOn = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainProcessor)
 };

@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainProcessor.h"
 
-// Un pédalier : une rangée de pédales dans l'ordre du signal (Amp > Harmonizer > Reverse > Chorus > Delay > Band Delay > Ultra-Tap),
+// Un pédalier : une rangée de pédales dans l'ordre du signal (Amp > Harmonizer > Reverse > Chorus > Delay > Band Delay > Ultra-Tap > Reverb),
 // chacune avec son interrupteur. Un clic sur le nom d'une pédale affiche ses réglages en dessous.
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer
@@ -54,7 +54,8 @@ private:
 
     static constexpr int headerHeight = 40;   // titre + Input
     static constexpr int stripHeight  = 64;   // la rangée de pédales
-    static constexpr int arrowWidth   = 14;   // 7 pédales sur 600 pixels
+    static constexpr int arrowWidth   = 14;
+    static constexpr int minPedalWidth = 70;  // de quoi lire « Harmonizer »
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainEditor)
 };

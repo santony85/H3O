@@ -13,6 +13,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addPedal ("Delay",      juce::Colour (0xffe0a040), chain.delay,      "delayon",      [this] { return chain.isDelayOn(); });
     addPedal ("Band Delay", juce::Colour (0xff40c0a0), chain.bandDelay,  "banddelayon",  [this] { return chain.isBandDelayOn(); });
     addPedal ("Ultra-Tap",  juce::Colour (0xffe05090), chain.ultraTap,   "ultratapon",   [this] { return chain.isUltraTapOn(); });
+    addPedal ("Reverb",     juce::Colour (0xff7090f0), chain.reverb,     "reverbon",     [this] { return chain.isReverbOn(); });
 
     // Assez de place pour la plus grande des interfaces
     int width = 0, height = 0;
@@ -21,6 +22,10 @@ ChainEditor::ChainEditor (ChainProcessor& p)
         width  = juce::jmax (width, pedal.editor->getWidth());
         height = juce::jmax (height, pedal.editor->getHeight());
     }
+
+    // …et assez large pour que chaque pédale garde un nom lisible
+    const int pedalCount = (int) pedals.size();
+    width = juce::jmax (width, 20 + pedalCount * minPedalWidth + (pedalCount - 1) * arrowWidth);
 
     setSize (width, headerHeight + stripHeight + height);
     select (0);

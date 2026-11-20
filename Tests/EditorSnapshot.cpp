@@ -3,6 +3,7 @@
 #include "ChainProcessor.h"
 #include "BandDelay/BandDelayEditor.h"
 #include "UltraTap/UltraTapEditor.h"
+#include "Reverb/ReverbEditor.h"
 
 #include <cstdio>
 
@@ -28,6 +29,12 @@ int main (int argc, char** argv)
         BandDelayProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("BandDelay.png"));
+    }
+
+    {
+        ReverbProcessor fx;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("Reverb.png"));
     }
 
     {
