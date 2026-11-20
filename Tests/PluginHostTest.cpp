@@ -165,7 +165,11 @@ int main (int argc, char** argv)
     const juce::String model = juce::String::fromUTF8 (argv[2]);
 
     juce::AudioPluginFormatManager formats;
+   #if JUCE_MAJOR_VERSION >= 9
+    juce::addDefaultFormatsToManager (formats);   // JUCE 9 : addDefaultFormats() a été supprimée
+   #else
     formats.addDefaultFormats();
+   #endif
 
     juce::OwnedArray<juce::PluginDescription> found;
     juce::AudioUnitPluginFormat au;

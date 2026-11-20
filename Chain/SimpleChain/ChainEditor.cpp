@@ -41,7 +41,11 @@ void ChainEditor::addPedal (const juce::String& name, juce::Colour colour, juce:
     pedal.colour = colour;
     pedal.isOn   = std::move (isOn);
 
+   #if JUCE_MAJOR_VERSION >= 9
+    pedal.editor.reset (effect.createEditorAndMakeActive());   // nouveau nom dans JUCE 9
+   #else
     pedal.editor.reset (effect.createEditorIfNeeded());
+   #endif
     addChildComponent (*pedal.editor);
 
     const int index = (int) pedals.size();
