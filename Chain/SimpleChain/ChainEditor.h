@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainProcessor.h"
 
-// Un pédalier : une rangée de pédales dans l'ordre du signal (Amp > Harmonizer > Reverse > Chorus > Delay > Band Delay > Ultra-Tap > Reverb),
+// Un pédalier : une rangée de pédales dans l'ordre du signal (Amp > Harmonizer > Reverse > Layered Shift > Chorus > Delay > Band Delay > Ultra-Tap > Reverb),
 // chacune avec son interrupteur. Un clic sur le nom d'une pédale affiche ses réglages en dessous.
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer

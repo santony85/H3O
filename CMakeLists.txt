@@ -130,6 +130,15 @@ set(REVERB_SOURCES
     ${EFFECTS_DIR}/Reverb/ReverbEditor.h
     ${EFFECTS_DIR}/Reverb/ReverbEditor.cpp)
 
+set(LAYEREDSHIFT_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/Harmonizer/PitchShifter.h
+    ${EFFECTS_DIR}/LayeredShift/LayeredShiftEngine.h
+    ${EFFECTS_DIR}/LayeredShift/LayeredShiftProcessor.h
+    ${EFFECTS_DIR}/LayeredShift/LayeredShiftProcessor.cpp
+    ${EFFECTS_DIR}/LayeredShift/LayeredShiftEditor.h
+    ${EFFECTS_DIR}/LayeredShift/LayeredShiftEditor.cpp)
+
 # Réglages communs à tous les plugins : sources, dossier "Source" dans Xcode, modules JUCE
 function(audiofx_setup_plugin target)
     set(sources ${ARGN})
@@ -165,6 +174,7 @@ add_subdirectory(Plugins/SimpleReverse)
 add_subdirectory(Plugins/SimpleUltraTap)
 add_subdirectory(Plugins/SimpleBandDelay)
 add_subdirectory(Plugins/SimpleReverb)
+add_subdirectory(Plugins/SimpleLayeredShift)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -249,7 +259,7 @@ juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
     Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
@@ -261,3 +271,10 @@ target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_d
 add_executable(ReverbTest Tests/ReverbTest.cpp)
 target_include_directories(ReverbTest PRIVATE ${EFFECTS_DIR}/Reverb)
 target_compile_features(ReverbTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du moteur Layered Shift, sans JUCE : cible LayeredShiftTest
+#==============================================================================
+add_executable(LayeredShiftTest Tests/LayeredShiftTest.cpp)
+target_include_directories(LayeredShiftTest PRIVATE ${EFFECTS_DIR})
+target_compile_features(LayeredShiftTest PRIVATE cxx_std_17)

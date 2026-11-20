@@ -4,6 +4,7 @@
 #include "Amp/AmpProcessor.h"
 #include "Harmonizer/HarmonizerProcessor.h"
 #include "Reverse/ReverseProcessor.h"
+#include "LayeredShift/LayeredShiftProcessor.h"
 #include "Chorus/ChorusProcessor.h"
 #include "Delay/DelayProcessor.h"
 #include "BandDelay/BandDelayProcessor.h"
@@ -49,6 +50,7 @@ public:
     AmpProcessor amp;
     HarmonizerProcessor harmonizer;
     ReverseProcessor reverse;
+    LayeredShiftProcessor layered;
     ChorusProcessor chorus;
     DelayProcessor delay;
     BandDelayProcessor bandDelay;
@@ -57,6 +59,7 @@ public:
 
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
     bool isHarmonizerOn() const noexcept { return harmonizerOn->load() >= 0.5f; }
+    bool isLayeredOn() const noexcept    { return layeredOn->load() >= 0.5f; }
     bool isReverseOn() const noexcept    { return reverseOn->load() >= 0.5f; }
     bool isChorusOn() const noexcept     { return chorusOn->load() >= 0.5f; }
     bool isDelayOn() const noexcept      { return delayOn->load() >= 0.5f; }
@@ -68,6 +71,7 @@ private:
     std::atomic<float>* harmonizerOn = nullptr;
     std::atomic<float>* ampOn = nullptr;
     std::atomic<float>* reverseOn = nullptr;
+    std::atomic<float>* layeredOn = nullptr;
     std::atomic<float>* chorusOn = nullptr;
     std::atomic<float>* delayOn = nullptr;
     std::atomic<float>* bandDelayOn = nullptr;

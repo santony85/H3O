@@ -4,6 +4,7 @@
 #include "BandDelay/BandDelayEditor.h"
 #include "UltraTap/UltraTapEditor.h"
 #include "Reverb/ReverbEditor.h"
+#include "LayeredShift/LayeredShiftEditor.h"
 
 #include <cstdio>
 
@@ -35,6 +36,12 @@ int main (int argc, char** argv)
         ReverbProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("Reverb.png"));
+    }
+
+    {
+        LayeredShiftProcessor fx;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("LayeredShift.png"));
     }
 
     {

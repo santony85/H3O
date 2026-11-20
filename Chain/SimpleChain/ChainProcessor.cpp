@@ -12,6 +12,7 @@ ChainProcessor::ChainProcessor()
                       // Amp, Reverse et Chorus coupés par défaut : tes réglages et sessions existants sonnent comme avant
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ampon", 1 }, "Amp On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverseon", 1 }, "Reverse On", false),
+                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "layeredon", 1 }, "Layered Shift On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "choruson", 1 }, "Chorus On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "delayon", 1 }, "Delay On", true),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "banddelayon", 1 }, "Band Delay On", false),
@@ -22,6 +23,7 @@ ChainProcessor::ChainProcessor()
     harmonizerOn = parameters.getRawParameterValue ("harmonizeron");
     ampOn        = parameters.getRawParameterValue ("ampon");
     reverseOn    = parameters.getRawParameterValue ("reverseon");
+    layeredOn    = parameters.getRawParameterValue ("layeredon");
     chorusOn     = parameters.getRawParameterValue ("choruson");
     delayOn      = parameters.getRawParameterValue ("delayon");
     bandDelayOn  = parameters.getRawParameterValue ("banddelayon");
@@ -33,6 +35,7 @@ ChainProcessor::ChainProcessor()
     harmonizer.input.setInsideChain();
     amp.input.setInsideChain();
     reverse.input.setInsideChain();
+    layered.input.setInsideChain();
     chorus.input.setInsideChain();
     delay.input.setInsideChain();
     bandDelay.input.setInsideChain();
@@ -49,7 +52,7 @@ bool ChainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Les effets internes travaillent toujours en stéréo
-    for (juce::AudioProcessor* fx : { (juce::AudioProcessor*) &amp, (juce::AudioProcessor*) &harmonizer, (juce::AudioProcessor*) &reverse, (juce::AudioProcessor*) &chorus, (juce::AudioProcessor*) &delay, (juce::AudioProcessor*) &bandDelay, (juce::AudioProcessor*) &ultraTap, (juce::AudioProcessor*) &reverb })
+    for (juce::AudioProcessor* fx : { (juce::AudioProcessor*) &amp, (juce::AudioProcessor*) &harmonizer, (juce::AudioProcessor*) &reverse, (juce::AudioProcessor*) &layered, (juce::AudioProcessor*) &chorus, (juce::AudioProcessor*) &delay, (juce::AudioProcessor*) &bandDelay, (juce::AudioProcessor*) &ultraTap, (juce::AudioProcessor*) &reverb })
     {
         // Pas de tête de lecture hors de processBlock (voir plus bas)
         fx->setPlayHead (nullptr);
@@ -63,6 +66,7 @@ void ChainProcessor::releaseResources()
     harmonizer.releaseResources();
     amp.releaseResources();
     reverse.releaseResources();
+    layered.releaseResources();
     chorus.releaseResources();
     delay.releaseResources();
     bandDelay.releaseResources();
@@ -72,7 +76,7 @@ void ChainProcessor::releaseResources()
 
 double ChainProcessor::getTailLengthSeconds() const
 {
-    return amp.getTailLengthSeconds() + harmonizer.getTailLengthSeconds() + reverse.getTailLengthSeconds() + chorus.getTailLengthSeconds() + delay.getTailLengthSeconds() + bandDelay.getTailLengthSeconds() + ultraTap.getTailLengthSeconds() + reverb.getTailLengthSeconds();
+    return amp.getTailLengthSeconds() + harmonizer.getTailLengthSeconds() + reverse.getTailLengthSeconds() + layered.getTailLengthSeconds() + chorus.getTailLengthSeconds() + delay.getTailLengthSeconds() + bandDelay.getTailLengthSeconds() + ultraTap.getTailLengthSeconds() + reverb.getTailLengthSeconds();
 }
 
 void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -90,6 +94,7 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     harmonizer.setPlayHead (playHead);
     amp.setPlayHead (playHead);
     reverse.setPlayHead (playHead);
+    layered.setPlayHead (playHead);
     chorus.setPlayHead (playHead);
     delay.setPlayHead (playHead);
     bandDelay.setPlayHead (playHead);
@@ -104,6 +109,9 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
 
     if (isReverseOn())
         reverse.processBlock (buffer, midi);
+
+    if (isLayeredOn())
+        layered.processBlock (buffer, midi);
 
     if (isChorusOn())
         chorus.processBlock (buffer, midi);
@@ -123,6 +131,7 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     harmonizer.setPlayHead (nullptr);
     amp.setPlayHead (nullptr);
     reverse.setPlayHead (nullptr);
+    layered.setPlayHead (nullptr);
     chorus.setPlayHead (nullptr);
     delay.setPlayHead (nullptr);
     bandDelay.setPlayHead (nullptr);
@@ -141,10 +150,11 @@ void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::ValueTree state ("SIMPLE_CHAIN");
     state.appendChild (parameters.copyState(), nullptr);
 
-    juce::MemoryBlock ampState, harmonizerState, reverseState, chorusState, delayState, bandDelayState, ultraTapState, reverbState;
+    juce::MemoryBlock ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState;
     amp.getStateInformation (ampState);
     harmonizer.getStateInformation (harmonizerState);
     reverse.getStateInformation (reverseState);
+    layered.getStateInformation (layeredState);
     chorus.getStateInformation (chorusState);
     delay.getStateInformation (delayState);
     bandDelay.getStateInformation (bandDelayState);
@@ -154,6 +164,7 @@ void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("harmonizer", harmonizerState.toBase64Encoding(), nullptr);
     state.setProperty ("amp", ampState.toBase64Encoding(), nullptr);
     state.setProperty ("reverse", reverseState.toBase64Encoding(), nullptr);
+    state.setProperty ("layered", layeredState.toBase64Encoding(), nullptr);
     state.setProperty ("chorus", chorusState.toBase64Encoding(), nullptr);
     state.setProperty ("delay", delayState.toBase64Encoding(), nullptr);
     state.setProperty ("banddelay", bandDelayState.toBase64Encoding(), nullptr);
@@ -185,6 +196,7 @@ void ChainProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     restore ("harmonizer", harmonizer);
     restore ("amp", amp);
+    restore ("layered", layered);   // absent des anciennes sessions : réglages d'usine
     restore ("reverse", reverse);   // absent des anciennes sessions : réglages d'usine
     restore ("chorus", chorus);   // absent des anciennes sessions : le chorus garde ses réglages d'usine
     restore ("delay", delay);
