@@ -106,6 +106,14 @@ set(REVERSE_SOURCES
     ${EFFECTS_DIR}/Reverse/ReverseEditor.h
     ${EFFECTS_DIR}/Reverse/ReverseEditor.cpp)
 
+set(ULTRATAP_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/UltraTap/UltraTapEngine.h
+    ${EFFECTS_DIR}/UltraTap/UltraTapProcessor.h
+    ${EFFECTS_DIR}/UltraTap/UltraTapProcessor.cpp
+    ${EFFECTS_DIR}/UltraTap/UltraTapEditor.h
+    ${EFFECTS_DIR}/UltraTap/UltraTapEditor.cpp)
+
 # Réglages communs à tous les plugins : sources, dossier "Source" dans Xcode, modules JUCE
 function(audiofx_setup_plugin target)
     set(sources ${ARGN})
@@ -138,6 +146,7 @@ add_subdirectory(Plugins/SimpleDelay)
 add_subdirectory(Plugins/SimpleHarmonizer)
 add_subdirectory(Plugins/SimpleChorus)
 add_subdirectory(Plugins/SimpleReverse)
+add_subdirectory(Plugins/SimpleUltraTap)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -200,3 +209,10 @@ target_link_libraries(HarmonizerTest PRIVATE juce::juce_audio_utils juce::juce_r
 add_executable(ReverseTest Tests/ReverseTest.cpp)
 target_include_directories(ReverseTest PRIVATE ${EFFECTS_DIR}/Reverse)
 target_compile_features(ReverseTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du moteur Ultra-Tap, sans JUCE : cible UltraTapTest
+#==============================================================================
+add_executable(UltraTapTest Tests/UltraTapTest.cpp)
+target_include_directories(UltraTapTest PRIVATE ${EFFECTS_DIR}/UltraTap)
+target_compile_features(UltraTapTest PRIVATE cxx_std_17)

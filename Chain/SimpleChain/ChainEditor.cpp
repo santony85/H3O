@@ -11,6 +11,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addPedal ("Reverse",    juce::Colour (0xff50c878), chain.reverse,    "reverseon",    [this] { return chain.isReverseOn(); });
     addPedal ("Chorus",     juce::Colour (0xffb070e0), chain.chorus,     "choruson",     [this] { return chain.isChorusOn(); });
     addPedal ("Delay",      juce::Colour (0xffe0a040), chain.delay,      "delayon",      [this] { return chain.isDelayOn(); });
+    addPedal ("Ultra-Tap",  juce::Colour (0xffe05090), chain.ultraTap,   "ultratapon",   [this] { return chain.isUltraTapOn(); });
 
     // Assez de place pour la plus grande des interfaces
     int width = 0, height = 0;

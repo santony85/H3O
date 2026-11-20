@@ -14,6 +14,7 @@ ChainProcessor::ChainProcessor()
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverseon", 1 }, "Reverse On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "choruson", 1 }, "Chorus On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "delayon", 1 }, "Delay On", true),
+                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ultratapon", 1 }, "Ultra-Tap On", false),
                   })
 {
     harmonizerOn = parameters.getRawParameterValue ("harmonizeron");
@@ -21,6 +22,7 @@ ChainProcessor::ChainProcessor()
     reverseOn    = parameters.getRawParameterValue ("reverseon");
     chorusOn     = parameters.getRawParameterValue ("choruson");
     delayOn      = parameters.getRawParameterValue ("delayon");
+    ultraTapOn   = parameters.getRawParameterValue ("ultratapon");
 
     // C'est la chaîne qui choisit l'entrée ; les effets reçoivent déjà de la stéréo
     input.attach (parameters);
@@ -29,6 +31,7 @@ ChainProcessor::ChainProcessor()
     reverse.input.setInsideChain();
     chorus.input.setInsideChain();
     delay.input.setInsideChain();
+    ultraTap.input.setInsideChain();
 }
 
 bool ChainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -40,7 +43,7 @@ bool ChainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Les effets internes travaillent toujours en stéréo
-    for (juce::AudioProcessor* fx : { (juce::AudioProcessor*) &amp, (juce::AudioProcessor*) &harmonizer, (juce::AudioProcessor*) &reverse, (juce::AudioProcessor*) &chorus, (juce::AudioProcessor*) &delay })
+    for (juce::AudioProcessor* fx : { (juce::AudioProcessor*) &amp, (juce::AudioProcessor*) &harmonizer, (juce::AudioProcessor*) &reverse, (juce::AudioProcessor*) &chorus, (juce::AudioProcessor*) &delay, (juce::AudioProcessor*) &ultraTap })
     {
         // Pas de tête de lecture hors de processBlock (voir plus bas)
         fx->setPlayHead (nullptr);
@@ -56,11 +59,12 @@ void ChainProcessor::releaseResources()
     reverse.releaseResources();
     chorus.releaseResources();
     delay.releaseResources();
+    ultraTap.releaseResources();
 }
 
 double ChainProcessor::getTailLengthSeconds() const
 {
-    return amp.getTailLengthSeconds() + harmonizer.getTailLengthSeconds() + reverse.getTailLengthSeconds() + chorus.getTailLengthSeconds() + delay.getTailLengthSeconds();
+    return amp.getTailLengthSeconds() + harmonizer.getTailLengthSeconds() + reverse.getTailLengthSeconds() + chorus.getTailLengthSeconds() + delay.getTailLengthSeconds() + ultraTap.getTailLengthSeconds();
 }
 
 void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -80,6 +84,7 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     reverse.setPlayHead (playHead);
     chorus.setPlayHead (playHead);
     delay.setPlayHead (playHead);
+    ultraTap.setPlayHead (playHead);
 
     if (isAmpOn())
         amp.processBlock (buffer, midi);
@@ -96,11 +101,15 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     if (isDelayOn())
         delay.processBlock (buffer, midi);
 
+    if (isUltraTapOn())
+        ultraTap.processBlock (buffer, midi);
+
     harmonizer.setPlayHead (nullptr);
     amp.setPlayHead (nullptr);
     reverse.setPlayHead (nullptr);
     chorus.setPlayHead (nullptr);
     delay.setPlayHead (nullptr);
+    ultraTap.setPlayHead (nullptr);
 }
 
 juce::AudioProcessorEditor* ChainProcessor::createEditor()
@@ -114,18 +123,20 @@ void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::ValueTree state ("SIMPLE_CHAIN");
     state.appendChild (parameters.copyState(), nullptr);
 
-    juce::MemoryBlock ampState, harmonizerState, reverseState, chorusState, delayState;
+    juce::MemoryBlock ampState, harmonizerState, reverseState, chorusState, delayState, ultraTapState;
     amp.getStateInformation (ampState);
     harmonizer.getStateInformation (harmonizerState);
     reverse.getStateInformation (reverseState);
     chorus.getStateInformation (chorusState);
     delay.getStateInformation (delayState);
+    ultraTap.getStateInformation (ultraTapState);
 
     state.setProperty ("harmonizer", harmonizerState.toBase64Encoding(), nullptr);
     state.setProperty ("amp", ampState.toBase64Encoding(), nullptr);
     state.setProperty ("reverse", reverseState.toBase64Encoding(), nullptr);
     state.setProperty ("chorus", chorusState.toBase64Encoding(), nullptr);
     state.setProperty ("delay", delayState.toBase64Encoding(), nullptr);
+    state.setProperty ("ultratap", ultraTapState.toBase64Encoding(), nullptr);
 
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -155,6 +166,7 @@ void ChainProcessor::setStateInformation (const void* data, int sizeInBytes)
     restore ("reverse", reverse);   // absent des anciennes sessions : réglages d'usine
     restore ("chorus", chorus);   // absent des anciennes sessions : le chorus garde ses réglages d'usine
     restore ("delay", delay);
+    restore ("ultratap", ultraTap);   // absent des anciennes sessions : réglages d'usine
 }
 
 // Point d'entrée appelé par Logic pour créer le plugin
