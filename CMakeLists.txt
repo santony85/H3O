@@ -140,6 +140,14 @@ set(LAYEREDSHIFT_SOURCES
     ${EFFECTS_DIR}/LayeredShift/LayeredShiftEditor.h
     ${EFFECTS_DIR}/LayeredShift/LayeredShiftEditor.cpp)
 
+set(COMPRESSOR_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/Compressor/CompressorEngine.h
+    ${EFFECTS_DIR}/Compressor/CompressorProcessor.h
+    ${EFFECTS_DIR}/Compressor/CompressorProcessor.cpp
+    ${EFFECTS_DIR}/Compressor/CompressorEditor.h
+    ${EFFECTS_DIR}/Compressor/CompressorEditor.cpp)
+
 set(SWEPTFILTER_SOURCES
     ${COMMON_SOURCES}
     ${EFFECTS_DIR}/SweptFilter/SweptFilterEngine.h
@@ -185,6 +193,7 @@ add_subdirectory(Plugins/SimpleBandDelay)
 add_subdirectory(Plugins/SimpleReverb)
 add_subdirectory(Plugins/SimpleLayeredShift)
 add_subdirectory(Plugins/SimpleSweptFilter)
+add_subdirectory(Plugins/SimpleCompressor)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -193,6 +202,13 @@ add_subdirectory(Chain/SimpleChain)
 add_executable(PitchTest Tests/PitchTest.cpp)
 target_include_directories(PitchTest PRIVATE ${EFFECTS_DIR}/Harmonizer)
 target_compile_features(PitchTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du compresseur, sans JUCE : cible CompressorTest
+#==============================================================================
+add_executable(CompressorTest Tests/CompressorTest.cpp)
+target_include_directories(CompressorTest PRIVATE ${EFFECTS_DIR}/Compressor)
+target_compile_features(CompressorTest PRIVATE cxx_std_17)
 
 #==============================================================================
 # Test du chorus, sans JUCE : cible ChorusTest
@@ -269,7 +285,7 @@ juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
     Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp Chain/SimpleChain/ChainPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
@@ -280,9 +296,9 @@ target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_d
 #==============================================================================
 juce_add_console_app(ChainTest PRODUCT_NAME "ChainTest")
 target_sources(ChainTest PRIVATE Tests/ChainTest.cpp
-    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp Chain/SimpleChain/ChainPresets.cpp
+    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp Chain/SimpleChain/ChainPresets.cpp Chain/SimpleChain/FactoryPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES})
 target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
 target_compile_definitions(ChainTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(ChainTest)

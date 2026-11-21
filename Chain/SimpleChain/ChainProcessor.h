@@ -10,6 +10,7 @@
 #include "Delay/DelayProcessor.h"
 #include "BandDelay/BandDelayProcessor.h"
 #include "UltraTap/UltraTapProcessor.h"
+#include "Compressor/CompressorProcessor.h"
 #include "Reverb/ReverbProcessor.h"
 #include "ChainRouting.h"
 #include "ModulationSources.h"
@@ -72,6 +73,7 @@ public:
     BandDelayProcessor bandDelay;
     UltraTapProcessor ultraTap;
     ReverbProcessor reverb;
+    CompressorProcessor compressor;
 
     bool isFilterOn() const noexcept     { return filterOn->load() >= 0.5f; }
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
@@ -173,6 +175,7 @@ private:
     std::atomic<float>* bandDelayOn = nullptr;
     std::atomic<float>* ultraTapOn = nullptr;
     std::atomic<float>* reverbOn = nullptr;
+    std::atomic<float>* compressorOn = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainProcessor)
 };

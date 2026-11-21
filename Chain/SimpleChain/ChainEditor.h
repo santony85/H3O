@@ -74,6 +74,8 @@ private:
     void loadPreset (const juce::File&);
     void savePresetAs();
     void savePreset (const juce::String& name, bool confirmReplace);
+    void saveCurrentPreset();
+    juce::String presetLeafName() const;
     void deletePreset();
     void showError (const juce::String&);
     void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void()> onOk);
@@ -134,7 +136,8 @@ private:
     static constexpr int arrowWidth     = 12;
     static constexpr int splitWidth     = 22;   // place des embranchements
     static constexpr int minPedalWidth  = 68;   // de quoi lire « Harmonizer »
-    static constexpr int maxPedalWidth  = 96;
+    static constexpr int maxPedalWidth  = 124;
+    static constexpr int editorWidth    = 1440;
     static constexpr int diagramMargin  = 12;   // marge à gauche et à droite, dans le schéma
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainEditor)

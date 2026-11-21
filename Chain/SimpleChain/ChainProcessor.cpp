@@ -19,6 +19,7 @@ namespace
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "banddelayon", 1 }, "Band Delay On", false),
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ultratapon", 1 }, "Ultra-Tap On", false),
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverbon", 1 }, "Reverb On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "compressoron", 1 }, "Compressor On", false),
             // Branches parallèles A et B
             std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchbalance", 1 }, "Branch Balance",
                                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f,
@@ -110,6 +111,7 @@ ChainProcessor::ChainProcessor()
     bandDelayOn  = parameters.getRawParameterValue ("banddelayon");
     ultraTapOn   = parameters.getRawParameterValue ("ultratapon");
     reverbOn     = parameters.getRawParameterValue ("reverbon");
+    compressorOn = parameters.getRawParameterValue ("compressoron");
 
     // Lus à travers la modulation, comme les réglages des effets
     branchBalance = chainTargets.get (parameters, "branchbalance");
@@ -140,15 +142,15 @@ ChainProcessor::ChainProcessor()
         v = 0.0f;
 
     // Même ordre que ChainRouting::Effect
-    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb };
-    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn };
+    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb, &compressor };
+    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn, compressorOn };
 
     // Tout ce que la matrice peut moduler : les réglages continus de chaque effet, puis les branches
     static const char* effectNames[] = { "Filter", "Amp", "Harmonizer", "Reverse", "Layered", "Chorus",
-                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Branches" };
+                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Branches" };
     std::array<ModTargets*, ChainRouting::numEffects + 1> targetLists {
         &filter.modulation, &amp.modulation, &harmonizer.modulation, &reverse.modulation, &layered.modulation,
-        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &chainTargets
+        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &compressor.modulation, &chainTargets
     };
 
     for (int e = 0; e <= ChainRouting::numEffects; ++e)
@@ -189,12 +191,13 @@ ChainProcessor::ChainProcessor()
     bandDelay.input.setInsideChain();
     ultraTap.input.setInsideChain();
     reverb.input.setInsideChain();
+    compressor.input.setInsideChain();
 }
 
 const char* ChainProcessor::onParamId (int id)
 {
     static const char* ids[] = { "filteron", "ampon", "harmonizeron", "reverseon", "layeredon",
-                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon" };
+                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon", "compressoron" };
     return ids[juce::jlimit (0, ChainRouting::numEffects - 1, id)];
 }
 
@@ -589,7 +592,7 @@ juce::ValueTree ChainProcessor::createState()
     juce::ValueTree state ("SIMPLE_CHAIN");
     state.appendChild (parameters.copyState(), nullptr);
 
-    juce::MemoryBlock filterState, ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState;
+    juce::MemoryBlock filterState, ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState, compressorState;
     filter.getStateInformation (filterState);
     amp.getStateInformation (ampState);
     harmonizer.getStateInformation (harmonizerState);
@@ -600,6 +603,7 @@ juce::ValueTree ChainProcessor::createState()
     bandDelay.getStateInformation (bandDelayState);
     ultraTap.getStateInformation (ultraTapState);
     reverb.getStateInformation (reverbState);
+    compressor.getStateInformation (compressorState);
 
     state.setProperty ("harmonizer", harmonizerState.toBase64Encoding(), nullptr);
     state.setProperty ("filter", filterState.toBase64Encoding(), nullptr);
@@ -611,6 +615,7 @@ juce::ValueTree ChainProcessor::createState()
     state.setProperty ("banddelay", bandDelayState.toBase64Encoding(), nullptr);
     state.setProperty ("ultratap", ultraTapState.toBase64Encoding(), nullptr);
     state.setProperty ("reverb", reverbState.toBase64Encoding(), nullptr);
+    state.setProperty ("compressor", compressorState.toBase64Encoding(), nullptr);
 
     state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
 
@@ -648,12 +653,19 @@ bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
     auto* inputParam = parameters.getParameter ("input");
     const float currentInput = inputParam->getValue();
 
+    // Un preset sans Amp (les presets d'usine) garde ton Amp tel quel : modèle NAM, IR, réglages, et allumé ou non
+    auto* ampOnParam = parameters.getParameter ("ampon");
+    const float currentAmpOn = ampOnParam->getValue();
+    const bool keepAmp = ! state.hasProperty ("amp");
+
     const auto own = state.getChildWithName (parameters.state.getType());
     if (own.isValid())
         parameters.replaceState (own);
 
     if (keepInput)
         inputParam->setValueNotifyingHost (currentInput);
+    if (keepAmp)
+        ampOnParam->setValueNotifyingHost (currentAmpOn);
 
     auto restore = [&state] (const juce::Identifier& key, juce::AudioProcessor& fx)
     {
@@ -672,6 +684,7 @@ bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
     restore ("banddelay", bandDelay);   // absent des anciennes sessions : réglages d'usine
     restore ("reverb", reverb);   // absent des anciennes sessions : réglages d'usine
     restore ("ultratap", ultraTap);   // absent des anciennes sessions : réglages d'usine
+    restore ("compressor", compressor);   // absent des anciennes sessions : réglages d'usine (et éteint)
 
     // Absent des anciennes sessions : tout en série, dans l'ordre d'origine
     // (sans prévenir l'hôte : charger une session ne la modifie pas)

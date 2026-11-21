@@ -1,7 +1,9 @@
 // Tests du routage de Simple Chain : ordre libre, branches parallèles A / B, état des sessions.
 //   ./ChainTest        Cible Xcode : ChainTest
 #include "ChainProcessor.h"
+#include "FactoryPresets.h"
 
+#include <cmath>
 #include <cstdio>
 
 namespace
@@ -151,7 +153,7 @@ namespace
         check (r.hasParallel() && r.effectsIn (branchA) == std::vector<int> { harmonizer }
                && r.effectsIn (branchB) == std::vector<int> { delay } && r.effectsIn (post) == std::vector<int> { reverb },
                "déplacements vers A, B et Après");
-        check (r.effectsIn (pre).size() == 7, "les autres restent avant la séparation");
+        check ((int) r.effectsIn (pre).size() == numEffects - 3, "les autres restent avant la séparation");
 
         r.move (amp, pre, 0);
         r.move (filter, pre, 99);
@@ -164,8 +166,15 @@ namespace
         // Session d'une version future avec un effet inconnu, et sans la réverbe : rien ne se perd
         const auto partial = Routing::fromString ("delay:a,unknown:b,amp:pre");
         check (partial.laneOf (delay) == branchA && partial.laneOf (amp) == pre && partial.laneOf (reverb) == pre
-               && partial.effectsIn (pre).front() == amp,
+               && partial.effectsIn (pre)[1] == amp,
                "session incomplète : les effets manquants se rangent en série");
+
+        // Session d'avant le compresseur : il arrive en tête de chaîne, le reste ne bouge pas
+        const auto old = Routing::fromString ("filter:pre,amp:pre,harmonizer:a,reverse:pre,layered:pre,chorus:pre,"
+                                              "delay:b,banddelay:pre,ultratap:pre,reverb:post");
+        check (old.effectsIn (pre).front() == compressor && old.effectsIn (pre)[1] == filter && old.laneOf (harmonizer) == branchA
+               && old.laneOf (delay) == branchB && old.laneOf (reverb) == post && Routing::unpack (old.pack()) == old,
+               "session d'avant le compresseur : compresseur en tête, routage intact");
     }
 
     void seriesOrder()
@@ -750,6 +759,160 @@ namespace
         }
     }
 
+    // Les 100 presets d'usine « H3000 Inspired » : rangés par catégorie, sans Amp, et à un niveau raisonnable
+    void factoryPresets()
+    {
+        std::printf ("\n--- Presets d'usine ---\n");
+        int h3000 = 0;
+        for (int i = 0; i < FactoryPresets::count(); ++i)
+            h3000 += FactoryPresets::bank (i) == FactoryPresets::folderName ? 1 : 0;
+        check (h3000 == 100 && FactoryPresets::count() == 200, "100 presets H3000 Inspired + 100 Multi-FX");
+
+        juce::StringArray paths;
+        for (int i = 0; i < FactoryPresets::count(); ++i)
+            paths.add (FactoryPresets::bank (i) + "/" + FactoryPresets::category (i) + "/" + FactoryPresets::name (i));
+        auto unique = paths;
+        unique.removeDuplicates (false);
+        check (unique.size() == paths.size(), "noms tous différents");
+
+        const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ChainTestFactory");
+        folder.deleteRecursively();
+        const auto error = FactoryPresets::writeAll (folder);
+        if (error.isNotEmpty())
+            std::printf ("  %s\n", error.toRawUTF8());
+        check (error.isEmpty(), "toutes les recettes s'appliquent et s'écrivent");
+
+        ChainProcessor chain;
+        chain.presets.setFolder (folder);
+        const auto files = chain.presets.list();
+        check (files.size() == 200, "200 fichiers, sous-dossiers compris");
+
+        // Ton Amp reste : allumé, avec son état (modèle, IR)
+        setParam (chain, "ampon", 1.0f);
+        setParam (chain, "input", 2.0f);
+        chain.amp.parameters.getParameter ("bass")->setValueNotifyingHost (0.8f);
+        check (chain.presets.load (files[0]).isEmpty(), "charger un preset d'usine");
+        check (chain.isAmpOn() && chain.amp.parameters.getParameter ("bass")->getValue() == 0.8f,
+               "l'Amp n'est pas touché (allumé, réglages gardés)");
+        check (chain.presetName.startsWith (juce::String (FactoryPresets::folderName) + "/") && chain.presets.current() == files[0],
+               "le nom du preset est son chemin (catégorie comprise)");
+        check (chain.presets.neighbour (1) == files[1] && chain.presets.neighbour (-1) == files.getLast(), "précédent / suivant à travers les catégories");
+        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 200,
+               "Save réenregistre le preset dans son sous-dossier");
+        check (chain.presets.saveTo (folder.getParentDirectory().getChildFile ("x.scpreset")).isNotEmpty(), "pas d'écriture hors du dossier");
+
+        // Le niveau : une suite de notes pincées, ni saturation ni silence
+        const double rate = 48000.0;
+        const int block = 512, seconds = 4, total = (int) rate * seconds;
+        juce::AudioBuffer<float> input (2, total);
+        const float notes[] = { 82.4f, 98.0f, 110.0f, 146.8f, 164.8f, 196.0f, 220.0f, 329.6f };
+        for (int i = 0; i < total; ++i)
+        {
+            const int note = i / (int) (rate * 0.5);
+            const double t = (i % (int) (rate * 0.5)) / rate;
+            const double phase = std::fmod (t * notes[note % 8], 1.0);
+            const auto v = (float) (0.3 * std::exp (-t * 5.0) * (2.0 * phase - 1.0));
+            input.setSample (0, i, v);
+            input.setSample (1, i, v);
+        }
+        const float inputRms = input.getRMSLevel (0, 0, total);
+
+        int parallel = 0, modulated = 0;
+        for (auto& file : files)
+        {
+            ChainProcessor fx;
+            fx.presets.setFolder (folder);
+            fx.presets.load (file);
+            parallel += fx.getRouting().hasParallel() ? 1 : 0;
+            for (int slot = 0; slot < ChainProcessor::numSlots; ++slot)
+                if (fx.getSlotDestination (slot) >= 0)
+                {
+                    ++modulated;
+                    break;
+                }
+        }
+        std::printf ("  %d presets en branches parallèles, %d avec modulation\n", parallel, modulated);
+        check (parallel >= files.size() - 5, "presque tous les presets utilisent les branches A / B");
+
+        int bad = 0;
+        float lowest = 100.0f, highest = -100.0f;
+        for (auto& file : files)
+        {
+            ChainProcessor fx;
+            fx.presets.setFolder (folder);
+            fx.presets.load (file);
+            fx.prepareToPlay (rate, block);
+            juce::AudioBuffer<float> out (input);
+            juce::MidiBuffer midi;
+            for (int start = 0; start < total; start += block)
+            {
+                juce::AudioBuffer<float> part (out.getArrayOfWritePointers(), 2, start, juce::jmin (block, total - start));
+                fx.processBlock (part, midi);
+            }
+
+            bool finite = true;
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < total; ++i)
+                    finite = finite && std::isfinite (out.getSample (c, i));
+            const float peak = out.getMagnitude (0, total);
+            const float gain = juce::Decibels::gainToDecibels (0.5f * (out.getRMSLevel (0, 0, total) + out.getRMSLevel (1, 0, total)) / inputRms);
+            lowest = juce::jmin (lowest, gain);
+            highest = juce::jmax (highest, gain);
+            if (! finite || peak > 1.5f || gain < -12.0f || gain > 6.0f)
+            {
+                ++bad;
+                std::printf ("  hors limites : %-55s crête %.2f, niveau %+.1f dB\n", fx.presets.nameOf (file).toRawUTF8(), peak, gain);
+            }
+        }
+        std::printf ("  niveaux de %+.1f à %+.1f dB par rapport au son sec\n", lowest, highest);
+        check (bad == 0, "aucun preset ne sature ni ne s'éteint");
+        folder.deleteRecursively();
+    }
+
+    // Le compresseur dans la chaîne : il comprime, et la session le retrouve
+    void compressorInChain()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Compresseur dans la chaîne ---\n");
+
+        ChainProcessor chain;
+        for (int e = 0; e < numEffects; ++e)
+            setParam (chain, ChainProcessor::onParamId (e), 0.0f);
+        setParam (chain, "compressoron", 1.0f);
+        check (chain.getRouting().effectsIn (pre).front() == compressor, "le compresseur est en tête de chaîne");
+
+        chain.compressor.setCurrentProgram (1);   // Country Squash
+        chain.compressor.parameters.getParameter ("automakeup")->setValueNotifyingHost (0.0f);
+        chain.prepareToPlay (48000.0, 512);
+
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        float lastPeak = 0.0f;
+        for (int block = 0; block < 100; ++block)
+        {
+            for (int i = 0; i < 512; ++i)
+            {
+                const float v = 0.5f * std::sin (2.0f * 3.14159265f * 220.0f * (float) (block * 512 + i) / 48000.0f);
+                buffer.setSample (0, i, v);
+                buffer.setSample (1, i, v);
+            }
+            chain.processBlock (buffer, midi);
+            lastPeak = buffer.getMagnitude (0, 512);
+        }
+        std::printf ("  réduction %.1f dB, crête de sortie %.2f (entrée 0.50)\n", chain.compressor.getGainReduction(), lastPeak);
+        check (chain.compressor.getGainReduction() > 6.0f && lastPeak < 0.25f, "un son fort est comprimé");
+
+        // La session garde ses réglages
+        chain.compressor.parameters.getParameter ("ratio")->setValueNotifyingHost (
+            chain.compressor.parameters.getParameter ("ratio")->convertTo0to1 (12.0f));
+        juce::MemoryBlock session;
+        chain.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (std::abs (reopened.compressor.parameters.getRawParameterValue ("ratio")->load() - 12.0f) < 0.05f
+               && reopened.isEffectOn (compressor), "la session retrouve le compresseur et ses réglages");
+    }
+
     void presets()
     {
         using namespace ChainRouting;
@@ -873,9 +1036,48 @@ namespace
     }
 }
 
-int main()
+// ./ChainTest --dump : liste les réglages et les presets d'usine de chaque effet de la chaîne
+static void dumpParameters()
+{
+    ChainProcessor chain;
+    for (int e = 0; e < ChainRouting::numEffects; ++e)
+    {
+        auto& fx = chain.effect (e);
+        std::printf ("\n=== %s\n", ChainRouting::keys()[(size_t) e]);
+        for (auto* p : fx.getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
+            {
+                const auto& range = r->getNormalisableRange();
+                juce::String extra;
+                if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (r))
+                    extra = " [" + c->choices.joinIntoString ("|") + "]";
+                std::printf ("  %-14s %-22s %9.2f .. %-9.2f def %-8.2f %s%s\n", r->getParameterID().toRawUTF8(), r->getName (30).toRawUTF8(),
+                             range.start, range.end, r->convertFrom0to1 (r->getDefaultValue()), r->getLabel().toRawUTF8(), extra.toRawUTF8());
+            }
+        juce::StringArray programs;
+        for (int i = 0; i < fx.getNumPrograms(); ++i)
+            programs.add (juce::String (i) + ":" + fx.getProgramName (i));
+        std::printf ("  presets: %s\n", programs.joinIntoString (", ").toRawUTF8());
+    }
+}
+
+int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
+
+    // ./ChainTest --factory : écrit les presets d'usine dans ~/Music/AudioFX/Simple Chain Presets/H3000 Inspired
+    if (argc > 1 && juce::String (argv[1]) == "--factory")
+    {
+        const auto error = FactoryPresets::writeAll (ChainPresets::defaultFolder());
+        std::printf ("%s\n", error.isEmpty() ? "presets d'usine écrits" : error.toRawUTF8());
+        return error.isEmpty() ? 0 : 1;
+    }
+
+    if (argc > 1 && juce::String (argv[1]) == "--dump")
+    {
+        dumpParameters();
+        return 0;
+    }
 
     routingModel();
     seriesOrder();
@@ -887,6 +1089,8 @@ int main()
     steppedModulation();
     wetDryWet();
     presets();
+    compressorInChain();
+    factoryPresets();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");
     return failures == 0 ? 0 : 1;

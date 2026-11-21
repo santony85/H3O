@@ -57,6 +57,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addPedal ("Band Delay", juce::Colour (0xff40c0a0));
     addPedal ("Ultra-Tap",  juce::Colour (0xffe05090));
     addPedal ("Reverb",     juce::Colour (0xff7090f0));
+    addPedal ("Compressor", juce::Colour (0xffc8d0e0));
 
     setupBranchControl (balance,       "branchbalance", "Balance",  "0 %: only branch A, 100 %: only branch B");
     setupBranchControl (spread,        "branchspread",  "Spread",   "Sends branch A to the left and branch B to the right");
@@ -84,6 +85,8 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     const int columns = ChainRouting::numEffects + 1;
     width = juce::jmax (width, 2 * (10 + diagramMargin) + columns * minPedalWidth
                                  + (ChainRouting::numEffects - 1) * arrowWidth + 2 * splitWidth);
+
+    width = juce::jmax (width, editorWidth);   // 1440 px : le schéma et l'en-tête respirent
 
     shown = chain.getRouting();
     setSize (width, headerHeight + stripHeight + height);
@@ -235,21 +238,68 @@ void ChainEditor::setParameter (const juce::String& id, float value)
 void ChainEditor::showPresetMenu()
 {
     const auto files = chain.presets.list();
-    const auto current = chain.presets.fileFor (chain.presetName);
-    const bool hasCurrent = chain.presetName.isNotEmpty() && current.existsAsFile();
+    const auto current = chain.presets.current();
+    const bool hasCurrent = current.existsAsFile();
+    const auto shortName = presetLeafName();
 
     juce::PopupMenu menu;
     menu.addSectionHeader ("Presets");
     if (files.isEmpty())
         menu.addItem (-1, "No presets yet: use Save As", false, false);
 
+    // Un sous-menu par sous-dossier (« H3000 Inspired › Reverse › … »)
+    struct Folder
+    {
+        juce::String name;
+        juce::PopupMenu menu;
+        std::vector<std::unique_ptr<Folder>> children;
+        bool ticked = false;
+
+        Folder& child (const juce::String& n)
+        {
+            for (auto& c : children)
+                if (c->name == n)
+                    return *c;
+            children.push_back (std::make_unique<Folder>());
+            children.back()->name = n;
+            return *children.back();
+        }
+
+        void addTo (juce::PopupMenu& parent)
+        {
+            for (auto& c : children)
+                c->addTo (menu);
+            parent.addSubMenu (name, menu, true, nullptr, ticked);
+        }
+    } root;
+
     for (int i = 0; i < files.size(); ++i)
-        menu.addItem (i + 1, files[i].getFileNameWithoutExtension(), true, files[i] == current);
+    {
+        const auto parts = juce::StringArray::fromTokens (chain.presets.nameOf (files[i]), "/", {});
+        const bool ticked = files[i] == current;
+        if (parts.size() <= 1)
+        {
+            menu.addItem (i + 1, files[i].getFileNameWithoutExtension(), true, ticked);
+            continue;
+        }
+
+        auto* folder = &root;
+        for (int p = 0; p < parts.size() - 1; ++p)
+        {
+            folder = &folder->child (parts[p]);
+            folder->ticked = folder->ticked || ticked;
+        }
+        folder->menu.addItem (i + 1, parts[parts.size() - 1], true, ticked);
+    }
+
+    // Les sous-dossiers après les presets de la racine
+    for (auto& c : root.children)
+        c->addTo (menu);
 
     menu.addSeparator();
-    menu.addItem (10001, hasCurrent ? "Save \"" + chain.presetName + "\"" : juce::String ("Save"), hasCurrent);
+    menu.addItem (10001, hasCurrent ? "Save \"" + shortName + "\"" : juce::String ("Save"), hasCurrent);
     menu.addItem (10002, juce::String::fromUTF8 ("Save As\xe2\x80\xa6"));
-    menu.addItem (10003, hasCurrent ? juce::String::fromUTF8 ("Delete \"") + chain.presetName + juce::String::fromUTF8 ("\"\xe2\x80\xa6")
+    menu.addItem (10003, hasCurrent ? juce::String::fromUTF8 ("Delete \"") + shortName + juce::String::fromUTF8 ("\"\xe2\x80\xa6")
                                     : juce::String ("Delete"), hasCurrent);
     menu.addSeparator();
     menu.addItem (10004, "Show presets folder in Finder");
@@ -263,7 +313,7 @@ void ChainEditor::showPresetMenu()
         if (result > 0 && result <= files.size())
             safe->loadPreset (files[result - 1]);
         else if (result == 10001)
-            safe->savePreset (safe->chain.presetName, false);
+            safe->saveCurrentPreset();
         else if (result == 10002)
             safe->savePresetAs();
         else if (result == 10003)
@@ -291,7 +341,7 @@ void ChainEditor::loadPreset (const juce::File& file)
 void ChainEditor::savePresetAs()
 {
     presetDialog = std::make_unique<juce::AlertWindow> ("Save preset", "Name of the preset:", juce::MessageBoxIconType::NoIcon, this);
-    presetDialog->addTextEditor ("name", chain.presetName);
+    presetDialog->addTextEditor ("name", presetLeafName());
     presetDialog->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
     presetDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
@@ -327,10 +377,24 @@ void ChainEditor::savePreset (const juce::String& name, bool confirmReplace)
     timerCallback();
 }
 
+void ChainEditor::saveCurrentPreset()
+{
+    if (const auto error = chain.presets.saveTo (chain.presets.current()); error.isNotEmpty())
+        showError (error);
+
+    timerCallback();
+}
+
+// « H3000 Inspired/Reverse/Backwards Lead » → « Backwards Lead »
+juce::String ChainEditor::presetLeafName() const
+{
+    return chain.presetName.fromLastOccurrenceOf ("/", false, false);
+}
+
 void ChainEditor::deletePreset()
 {
-    const auto file = chain.presets.fileFor (chain.presetName);
-    confirm ("Delete preset?", "\"" + chain.presetName + "\" will be moved to the Trash (you can still get it back from there).",
+    const auto file = chain.presets.current();
+    confirm ("Delete preset?", "\"" + presetLeafName() + "\" will be moved to the Trash (you can still get it back from there).",
              "Move to Trash", [this, file]
              {
                  if (! chain.presets.remove (file))
@@ -513,7 +577,7 @@ void ChainEditor::timerCallback()
         pedals[(size_t) i].editor->setAlpha (chain.isEffectOn (i) ? 1.0f : 0.35f);
 
     // Nom du preset (chargé, enregistré, ou session rouverte)
-    const auto presetText = (chain.presetName.isNotEmpty() ? chain.presetName : juce::String ("No preset"))
+    const auto presetText = (chain.presetName.isNotEmpty() ? presetLeafName() : juce::String ("No preset"))
                             + "  " + juce::String::fromUTF8 ("\xe2\x96\xbe");
     if (presetButton.getButtonText() != presetText)
         presetButton.setButtonText (presetText);

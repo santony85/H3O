@@ -9,17 +9,36 @@ juce::File ChainPresets::defaultFolder()
 
 juce::Array<juce::File> ChainPresets::list() const
 {
-    auto files = folder.findChildFiles (juce::File::findFiles, false, juce::String ("*") + extension);
+    auto files = folder.findChildFiles (juce::File::findFiles, true, juce::String ("*") + extension);
 
-    struct ByName
+    // Les presets de la racine d'abord, puis les sous-dossiers
+    struct ByPath
     {
-        static int compareElements (const juce::File& a, const juce::File& b)
+        const juce::File& root;
+        int compareElements (const juce::File& a, const juce::File& b) const
         {
-            return a.getFileNameWithoutExtension().compareNatural (b.getFileNameWithoutExtension());
+            const bool topA = a.getParentDirectory() == root, topB = b.getParentDirectory() == root;
+            if (topA != topB)
+                return topA ? -1 : 1;
+            return a.getRelativePathFrom (root).compareNatural (b.getRelativePathFrom (root));
         }
-    } byName;
-    files.sort (byName);
+    } byPath { folder };
+    files.sort (byPath);
     return files;
+}
+
+juce::String ChainPresets::nameOf (const juce::File& file) const
+{
+    const auto path = file.getRelativePathFrom (folder).replaceCharacter ('\\', '/');
+    return path.dropLastCharacters (file.getFileExtension().length());
+}
+
+juce::File ChainPresets::current() const
+{
+    if (chain.presetName.isEmpty())
+        return {};
+    const auto file = folder.getChildFile (chain.presetName + extension);
+    return file.isAChildOf (folder) ? file : juce::File();
 }
 
 namespace
@@ -41,11 +60,18 @@ juce::String ChainPresets::save (const juce::String& name)
     if (legalName (name).isEmpty())
         return "Give the preset a name";
 
-    if (const auto result = folder.createDirectory(); result.failed())
+    return saveTo (fileFor (name));
+}
+
+juce::String ChainPresets::saveTo (const juce::File& file)
+{
+    if (! file.isAChildOf (folder))
+        return "Presets live in " + folder.getFullPathName();
+
+    if (const auto result = file.getParentDirectory().createDirectory(); result.failed())
         return "Can't create the presets folder: " + result.getErrorMessage();
 
-    const auto file = fileFor (name);
-    chain.presetName = file.getFileNameWithoutExtension();
+    chain.presetName = nameOf (file);
 
     auto state = chain.createState();
     state.setProperty ("presetversion", 1, nullptr);
@@ -63,7 +89,7 @@ juce::String ChainPresets::load (const juce::File& file)
     if (xml == nullptr || ! chain.restoreState (juce::ValueTree::fromXml (*xml), true))
         return file.getFileNameWithoutExtension() + " is not a Simple Chain preset";
 
-    chain.presetName = file.getFileNameWithoutExtension();
+    chain.presetName = nameOf (file);
     chain.updateHostDisplay (juce::AudioProcessor::ChangeDetails().withNonParameterStateChanged (true));
     return {};
 }
@@ -76,7 +102,7 @@ juce::File ChainPresets::neighbour (int direction) const
 
     int index = -1;
     for (int i = 0; i < files.size(); ++i)
-        if (files[i].getFileNameWithoutExtension() == chain.presetName)
+        if (nameOf (files[i]) == chain.presetName)
             index = i;
 
     if (index < 0)
@@ -90,7 +116,7 @@ bool ChainPresets::remove (const juce::File& file)
     if (! file.existsAsFile() || ! file.moveToTrash())
         return false;
 
-    if (file.getFileNameWithoutExtension() == chain.presetName)
+    if (nameOf (file) == chain.presetName)
         chain.presetName.clear();
     return true;
 }

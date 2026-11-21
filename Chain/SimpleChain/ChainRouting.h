@@ -18,16 +18,17 @@
 // En C++ pur, sans JUCE, pour pouvoir le tester seul.
 namespace ChainRouting
 {
-    constexpr int numEffects = 10;
+    constexpr int numEffects = 11;
 
     // Les identifiants des effets : leur ordre d'origine dans la chaîne.
     // Ne jamais changer l'ordre ni les noms : ils sont enregistrés dans les sessions.
-    enum Effect : std::uint8_t { filter, amp, harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb };
+    // (le compresseur, arrivé plus tard, a le dernier identifiant mais se place en tête de chaîne)
+    enum Effect : std::uint8_t { filter, amp, harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb, compressor };
 
     inline const std::array<const char*, numEffects>& keys()
     {
         static const std::array<const char*, numEffects> k {
-            "filter", "amp", "harmonizer", "reverse", "layered", "chorus", "delay", "banddelay", "ultratap", "reverb"
+            "filter", "amp", "harmonizer", "reverse", "layered", "chorus", "delay", "banddelay", "ultratap", "reverb", "compressor"
         };
         return k;
     }
@@ -45,14 +46,16 @@ namespace ChainRouting
         std::array<std::uint8_t, numEffects> order {};   // identifiants des effets, dans l'ordre du signal
         std::array<std::uint8_t, numEffects> lane {};    // section de chaque effet (indexé par identifiant)
 
-        // Tout en série, dans l'ordre d'origine : le son de Simple Chain avant le routage
+        // Tout en série, dans l'ordre d'origine (le compresseur en tête, comme une pédale en début de chaîne)
         static Routing series()
         {
             Routing r;
+            r.order[0] = compressor;
             for (int i = 0; i < numEffects; ++i)
             {
-                r.order[(size_t) i] = (std::uint8_t) i;
-                r.lane[(size_t) i]  = pre;
+                if (i != compressor)
+                    r.order[(size_t) (i < compressor ? i + 1 : i)] = (std::uint8_t) i;
+                r.lane[(size_t) i] = pre;
             }
             return r;
         }
@@ -119,16 +122,23 @@ namespace ChainRouting
             rebuildOrder (lanes);
         }
 
-        // Tient dans 60 bits : 10 × 4 bits pour l'ordre, 10 × 2 bits pour les sections.
+        // Tient dans 56 bits : 11 × 4 bits pour l'ordre, puis le nombre d'effets dans Avant, A et B (4 bits chacun).
+        // L'ordre étant rangé section par section, les sections se déduisent de ces nombres.
         // Permet de le passer au fil audio dans un seul std::atomic<uint64_t>.
         std::uint64_t pack() const
         {
+            Routing r = *this;
+            r.normalise();
+
             std::uint64_t v = 0;
+            int counts[numLanes] = {};
             for (int i = 0; i < numEffects; ++i)
             {
-                v |= (std::uint64_t) (order[(size_t) i] & 15) << (4 * i);
-                v |= (std::uint64_t) (lane[(size_t) i] & 3) << (40 + 2 * i);
+                v |= (std::uint64_t) (r.order[(size_t) i] & 15) << (4 * i);
+                ++counts[r.lane[(size_t) i] & 3];
             }
+            for (int l = 0; l < 3; ++l)
+                v |= (std::uint64_t) (counts[l] & 15) << (4 * numEffects + 4 * l);
             return v;
         }
 
@@ -139,11 +149,25 @@ namespace ChainRouting
             for (int i = 0; i < numEffects; ++i)
             {
                 r.order[(size_t) i] = (std::uint8_t) ((v >> (4 * i)) & 15);
-                r.lane[(size_t) i]  = (std::uint8_t) ((v >> (40 + 2 * i)) & 3);
                 if (r.order[(size_t) i] < numEffects)
                     seen |= 1u << r.order[(size_t) i];
             }
-            return seen == (1u << numEffects) - 1 ? r : series();
+
+            int counts[3];
+            for (int l = 0; l < 3; ++l)
+                counts[l] = (int) ((v >> (4 * numEffects + 4 * l)) & 15);
+
+            if (seen != (1u << numEffects) - 1 || counts[0] + counts[1] + counts[2] > numEffects)
+                return series();
+
+            int position = 0;
+            for (int l = 0; l < numLanes; ++l)
+            {
+                const int n = l < 3 ? counts[l] : numEffects - position;
+                for (int k = 0; k < n; ++k, ++position)
+                    r.lane[r.order[(size_t) position]] = (std::uint8_t) l;
+            }
+            return r;
         }
 
         // Pour les sessions : "filter:pre,amp:pre,harmonizer:a,…"
@@ -197,7 +221,7 @@ namespace ChainRouting
             if (count == 0)
                 return series();
 
-            // Effet absent de la session : à la fin du signal
+            // Effet absent de la session : à la fin du signal (le compresseur, lui, en tête)
             bool anyPost = false;
             for (int i = 0; i < count; ++i)
                 anyPost = anyPost || r.lane[r.order[(size_t) i]] == post;
@@ -205,6 +229,15 @@ namespace ChainRouting
             for (int e = 0; e < numEffects; ++e)
                 if (! placed[e])
                 {
+                    if (e == compressor)
+                    {
+                        for (int i = count; i > 0; --i)
+                            r.order[(size_t) i] = r.order[(size_t) i - 1];
+                        r.order[0] = (std::uint8_t) e;
+                        r.lane[(size_t) e] = pre;
+                        ++count;
+                        continue;
+                    }
                     r.order[(size_t) count++] = (std::uint8_t) e;
                     r.lane[(size_t) e] = anyPost ? post : pre;
                 }
@@ -254,20 +287,20 @@ namespace ChainRouting
               Routing::series() },
             // Les hauteurs d'un côté, les échos de l'autre : chacun garde sa netteté
             { "Pitch | Delays",
-              make ({ filter, amp }, { harmonizer, reverse, layered }, { chorus, delay, bandDelay, ultraTap }, { reverb }) },
+              make ({ compressor, filter, amp }, { harmonizer, reverse, layered }, { chorus, delay, bandDelay, ultraTap }, { reverb }) },
             // Le son sec garde son attaque, les effets s'ajoutent à côté
             { "Dry | Effects",
-              make ({ filter, amp }, {}, { harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap }, { reverb }) },
+              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap }, { reverb }) },
             // Échos et réverbération en parallèle : la réverbe ne brouille pas les répétitions
             { "Delays | Reverb",
-              make ({ filter, amp, harmonizer, reverse, layered, chorus }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
+              make ({ compressor, filter, amp, harmonizer, reverse, layered, chorus }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
             // Le rack de Bob Bradshaw : le son sec de l'ampli au centre, les effets à 100 % autour.
             // Choisi dans le menu, il allume aussi « Wet Only » (branche B sans son sec)
             { "Wet/Dry/Wet",
-              make ({ filter, amp }, {}, { harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb }, {}) },
+              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb }, {}) },
             // Deux harmonies différentes, une à gauche et une à droite (avec Spread)
             { "Harmonizer | Layered",
-              make ({ filter, amp }, { harmonizer, chorus }, { layered, reverse }, { delay, bandDelay, ultraTap, reverb }) },
+              make ({ compressor, filter, amp }, { harmonizer, chorus }, { layered, reverse }, { delay, bandDelay, ultraTap, reverb }) },
         };
         return list;
     }

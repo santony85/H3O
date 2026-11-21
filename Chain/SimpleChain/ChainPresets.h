@@ -19,14 +19,24 @@ public:
     void setFolder (const juce::File& f) { folder = f; }   // pour les tests
     const juce::File& getFolder() const  { return folder; }
 
-    // Les presets, par ordre alphabétique
+    // Les presets, sous-dossiers compris (« H3000 Inspired/Reverse/… »), par ordre alphabétique du chemin
     juce::Array<juce::File> list() const;
 
+    // Le nom d'un preset : son chemin dans le dossier, sans l'extension (« H3000 Inspired/Reverse/Backwards Lead »)
+    juce::String nameOf (const juce::File&) const;
+
+    // Le fichier d'un nouveau nom tapé par l'utilisateur (à la racine du dossier, caractères interdits → tirets)
     juce::File fileFor (const juce::String& name) const;
+
+    // Le fichier du preset actuel (sous-dossier compris), ou rien
+    juce::File current() const;
     bool exists (const juce::String& name) const { return fileFor (name).existsAsFile(); }
 
     // Enregistre l'état actuel sous ce nom (remplace un preset du même nom). Renvoie une erreur, ou rien.
     juce::String save (const juce::String& name);
+
+    // Enregistre l'état actuel dans ce fichier précis (Save du preset actuel, presets d'usine)
+    juce::String saveTo (const juce::File&);
 
     // Charge un preset (l'entrée Stereo / Mono ne change pas). Renvoie une erreur, ou rien.
     juce::String load (const juce::File&);

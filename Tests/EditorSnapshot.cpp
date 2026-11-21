@@ -6,6 +6,7 @@
 #include "Reverb/ReverbEditor.h"
 #include "LayeredShift/LayeredShiftEditor.h"
 #include "SweptFilter/SweptFilterEditor.h"
+#include "Compressor/CompressorEditor.h"
 
 #include <cstdio>
 
@@ -49,6 +50,12 @@ int main (int argc, char** argv)
         SweptFilterProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("SweptFilter.png"));
+    }
+
+    {
+        CompressorProcessor fx;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("Compressor.png"));
     }
 
     {
