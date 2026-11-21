@@ -45,9 +45,16 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addPedal ("Ultra-Tap",  juce::Colour (0xffe05090));
     addPedal ("Reverb",     juce::Colour (0xff7090f0));
 
-    setupBranchControl (balance,       "branchbalance", "Balance A | B", "0 %: only branch A, 100 %: only branch B");
-    setupBranchControl (spread,        "branchspread",  "Spread",        "Sends branch A to the left and branch B to the right");
-    setupBranchControl (crossFeedback, "crossfeedback", "Cross Feedback", "Feeds the output of branch B back into branch A");
+    setupBranchControl (balance,       "branchbalance", "Balance",  "0 %: only branch A, 100 %: only branch B");
+    setupBranchControl (spread,        "branchspread",  "Spread",   "Sends branch A to the left and branch B to the right");
+    setupBranchControl (branchWidth,   "branchwidth",   "B Width",  "Stereo width of branch B: 0 % mono, 200 % extra wide");
+    setupBranchControl (crossFeedback, "crossfeedback", "Cross FB", "Cross feedback: feeds the output of branch B back into branch A");
+
+    wetOnlyButton.setTooltip ("Wet/Dry/Wet, like Bob Bradshaw's racks: the pedals of branch B run side by side, 100 % wet, "
+                              "next to the dry sound of branch A. At Balance 50 %, dry and wet are both at full level.");
+    wetOnlyButton.setColour (juce::ToggleButton::tickColourId, juce::Colour (0xffffa060));
+    addAndMakeVisible (wetOnlyButton);
+    wetOnlyAttachment = std::make_unique<ButtonAttachment> (chain.parameters, "wetonly", wetOnlyButton);
 
     // Assez de place pour la plus grande des interfaces
     int width = 0, height = 0;
@@ -182,9 +189,28 @@ void ChainEditor::showRoutingMenu()
                         [safe = juce::Component::SafePointer<ChainEditor> (this)] (int result)
     {
         const auto& templates = ChainRouting::templates();
-        if (safe != nullptr && result > 0 && result <= (int) templates.size())
-            safe->applyRouting (templates[(size_t) result - 1].routing);
+        if (safe == nullptr || result <= 0 || result > (int) templates.size())
+            return;
+
+        // Wet/Dry/Wet : effets de B à 100 % et son sec au centre. Les autres modèles mélangent normalement.
+        const auto& t = templates[(size_t) result - 1];
+        const bool wdw = juce::String (t.name) == "Wet/Dry/Wet";
+        safe->setParameter ("wetonly", wdw ? 1.0f : 0.0f);
+        if (wdw)
+            safe->setParameter ("branchspread", 0.0f);
+
+        safe->applyRouting (t.routing);
     });
+}
+
+void ChainEditor::setParameter (const juce::String& id, float value)
+{
+    if (auto* param = chain.parameters.getParameter (id))
+    {
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (param->convertTo0to1 (value));
+        param->endChangeGesture();
+    }
 }
 
 void ChainEditor::showPedalMenu (int effect)
@@ -340,11 +366,12 @@ void ChainEditor::timerCallback()
     }
 
     const float branchAlpha = shown.hasParallel() ? 1.0f : 0.4f;
-    for (auto* control : { &balance, &spread, &crossFeedback })
+    for (auto* control : { &balance, &spread, &branchWidth, &crossFeedback })
     {
         control->slider.setAlpha (branchAlpha);
         control->label.setAlpha (branchAlpha);
     }
+    wetOnlyButton.setAlpha (branchAlpha);
 
     repaint (0, headerHeight, getWidth(), stripHeight);
 }
@@ -447,6 +474,16 @@ void ChainEditor::paint (juce::Graphics& g)
             g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
             g.drawText (lane == ChainRouting::branchA ? "A" : "B",
                         juce::Rectangle<float> ((float) splitX + 3.0f, y - 18.0f, 14.0f, 14.0f), juce::Justification::centred);
+        }
+
+        // Wet Only : les pédales de B ne s'enchaînent plus, elles tournent côte à côte à 100 %
+        if (wetOnlyButton.getToggleState())
+        {
+            g.setColour (juce::Colour (0xffffa060));
+            g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+            g.drawText (juce::String::fromUTF8 ("B: pedals side by side, 100 % wet"),
+                        juce::Rectangle<float> ((float) splitX + 20.0f, yM - 9.0f, (float) (mergeX - splitX) - 40.0f, 18.0f),
+                        juce::Justification::centred);
         }
     }
     else
@@ -597,13 +634,14 @@ void ChainEditor::resized()
     diagram = strip.removeFromTop (diagramHeight).reduced (10, 0);
     layoutDiagram();
 
-    // Balance, Spread, Cross Feedback
+    // Wet Only, puis Balance, Spread, B Width, Cross Feedback
     auto controls = strip.reduced (10, 4);
-    const int w = controls.getWidth() / 3;
-    for (auto* control : { &balance, &spread, &crossFeedback })
+    wetOnlyButton.setBounds (controls.removeFromLeft (110));
+    const int w = controls.getWidth() / 4;
+    for (auto* control : { &balance, &spread, &branchWidth, &crossFeedback })
     {
-        auto col = controls.removeFromLeft (w).reduced (4, 0);
-        control->label.setBounds (col.removeFromLeft (100));
+        auto col = controls.removeFromLeft (w).reduced (3, 0);
+        control->label.setBounds (col.removeFromLeft (62));
         control->slider.setBounds (col);
     }
 

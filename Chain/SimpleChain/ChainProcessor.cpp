@@ -26,6 +26,11 @@ namespace
             std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchspread", 1 }, "Branch Spread",
                                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f,
                                                          juce::AudioParameterFloatAttributes().withLabel ("%")),
+            // Wet/Dry/Wet : effets de B à 100 %, côte à côte ; largeur stéréo de B
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "wetonly", 1 }, "Branch B Wet Only", false),
+            std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchwidth", 1 }, "Branch B Width",
+                                                         juce::NormalisableRange<float> (0.0f, 200.0f, 0.1f), 100.0f,
+                                                         juce::AudioParameterFloatAttributes().withLabel ("%")),
             std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "crossfeedback", 1 }, "Cross Feedback",
                                                          juce::NormalisableRange<float> (0.0f, 90.0f, 0.1f), 0.0f,
                                                          juce::AudioParameterFloatAttributes().withLabel ("%")));
@@ -110,6 +115,8 @@ ChainProcessor::ChainProcessor()
     branchBalance = chainTargets.get (parameters, "branchbalance");
     branchSpread  = chainTargets.get (parameters, "branchspread");
     crossFeedback = chainTargets.get (parameters, "crossfeedback");
+    branchWidth   = chainTargets.get (parameters, "branchwidth");
+    wetOnly       = parameters.getRawParameterValue ("wetonly");
 
     for (int l = 0; l < 2; ++l)
     {
@@ -162,6 +169,10 @@ ChainProcessor::ChainProcessor()
             destinations.push_back (d);
         }
     }
+
+    // Le Mix de chaque effet, que Wet Only pousse à 100 % dans la branche B
+    for (int e = 0; e < ChainRouting::numEffects; ++e)
+        mixDestination[(size_t) e] = findDestination (juce::String (ChainRouting::keys()[(size_t) e]) + "/mix");
 
     modSum.assign (destinations.size(), 0.0f);
     modApplied.assign (destinations.size(), 0.0f);
@@ -220,6 +231,8 @@ void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     const int size = juce::jmax (1, samplesPerBlock);
     laneA.setSize (2, size);
     laneB.setSize (2, size);
+    laneWet.setSize (2, size);
+    laneEffect.setSize (2, size);
 
     // Le retour croisé a un bloc de retard : la sortie de B n'existe qu'une fois A calculé
     feedbackLine.setSize (2, size);
@@ -237,6 +250,8 @@ void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     sources.prepare (sampleRate);
     monoScratch.assign ((size_t) size, 0.0f);
 
+    widthGain.reset (sampleRate, 0.03);
+    widthGain.setCurrentAndTargetValue (branchWidth->load() * 0.01f);
     feedbackGain.reset (sampleRate, 0.03);
     feedbackGain.setCurrentAndTargetValue (crossFeedback->load() * 0.01f);
 }
@@ -314,7 +329,7 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         float* channels[2] = { buffer.getWritePointer (0, start), buffer.getWritePointer (numChannels - 1, start) };
         juce::AudioBuffer<float> part (channels, numChannels, length);
 
-        updateModulation (part, start);
+        updateModulation (part, start, r);
         processRouting (r, part, midi);
     }
 
@@ -371,7 +386,58 @@ void ChainProcessor::processRouting (const ChainRouting::Routing& r, juce::Audio
         }
 
         processLane (ChainRouting::branchA, r, a, midi);
-        processLane (ChainRouting::branchB, r, b, midi);
+
+        const bool killDry = wetOnly->load() >= 0.5f;
+        if (killDry)
+        {
+            // Wet Only, comme le mélangeur d'effets d'un rack : chaque effet de B reçoit l'entrée de la branche,
+            // sort 100 % effet, et les sorties s'additionnent (sans son sec)
+            if (n > laneWet.getNumSamples())
+            {
+                laneWet.setSize (2, n, false, false, true);
+                laneEffect.setSize (2, n, false, false, true);
+            }
+
+            juce::AudioBuffer<float> wet (laneWet.getArrayOfWritePointers(), 2, n);
+            juce::AudioBuffer<float> one (laneEffect.getArrayOfWritePointers(), 2, n);
+            wet.clear();
+
+            for (auto id : r.order)
+                if (r.lane[id] == ChainRouting::branchB && isEffectOn (id))
+                {
+                    for (int ch = 0; ch < 2; ++ch)
+                        one.copyFrom (ch, 0, b, ch, 0, n);
+                    effects[id]->processBlock (one, midi);
+                    for (int ch = 0; ch < 2; ++ch)
+                        wet.addFrom (ch, 0, one, ch, 0, n);
+                }
+
+            for (int ch = 0; ch < 2; ++ch)
+                b.copyFrom (ch, 0, wet, ch, 0, n);
+        }
+        else
+        {
+            processLane (ChainRouting::branchB, r, b, midi);
+        }
+
+        // Largeur stéréo de B (Width) : 0 % = mono, 100 % = telle quelle, 200 % = élargie
+        widthGain.setTargetValue (branchWidth->load() * 0.01f);
+        if (widthGain.isSmoothing() || ! juce::exactlyEqual (widthGain.getTargetValue(), 1.0f))
+        {
+            auto* left  = b.getWritePointer (0);
+            auto* right = b.getWritePointer (1);
+            for (int i = 0; i < n; ++i)
+            {
+                const float w = widthGain.getNextValue();
+                const float mid = 0.5f * (left[i] + right[i]), side = 0.5f * (left[i] - right[i]) * w;
+                left[i]  = mid + side;
+                right[i] = mid - side;
+            }
+        }
+        else
+        {
+            widthGain.skip (n);
+        }
 
         for (int ch = 0; ch < 2; ++ch)
         {
@@ -385,10 +451,15 @@ void ChainProcessor::processRouting (const ChainRouting::Routing& r, juce::Audio
         // Mélange : Balance dose A et B, Spread envoie A à gauche et B à droite
         const float balance = branchBalance->load() * 0.01f;
         const float spread  = branchSpread->load() * 0.01f;
-        mixGains[0].setTargetValue ((1.0f - balance) * (1.0f + spread));   // A à gauche
-        mixGains[1].setTargetValue ((1.0f - balance) * (1.0f - spread));   // A à droite
-        mixGains[2].setTargetValue (balance * (1.0f - spread));            // B à gauche
-        mixGains[3].setTargetValue (balance * (1.0f + spread));            // B à droite
+        // Wet Only : A (sec) et B (effets seuls) ne se ressemblent plus, on ne les dose pas en fondu :
+        // à 50 %, le sec et les effets sont tous deux à plein volume, comme les baffles d'un Wet/Dry/Wet
+        const float gainA = killDry ? juce::jmin (1.0f, 2.0f * (1.0f - balance)) : 1.0f - balance;
+        const float gainB = killDry ? juce::jmin (1.0f, 2.0f * balance) : balance;
+
+        mixGains[0].setTargetValue (gainA * (1.0f + spread));   // A à gauche
+        mixGains[1].setTargetValue (gainA * (1.0f - spread));   // A à droite
+        mixGains[2].setTargetValue (gainB * (1.0f - spread));   // B à gauche
+        mixGains[3].setTargetValue (gainB * (1.0f + spread));   // B à droite
 
         auto* outL = buffer.getWritePointer (0);
         auto* outR = buffer.getWritePointer (1);
@@ -431,7 +502,7 @@ void ChainProcessor::setSlotDestination (int slot, int destination)
 }
 
 // Avance les sources et pose les décalages sur les réglages visés
-void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part, int startInBlock)
+void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part, int startInBlock, const ChainRouting::Routing& r)
 {
     const int n = part.getNumSamples();
     const double bpm = tempo.load();
@@ -489,6 +560,12 @@ void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part, int
         }
         slotOutput[(size_t) slot].store (out, std::memory_order_relaxed);
     }
+
+    // Wet Only : les effets de la branche B ne gardent que leur effet (Mix poussé au maximum)
+    if (wetOnly->load() >= 0.5f)
+        for (int e = 0; e < ChainRouting::numEffects; ++e)
+            if (r.lane[(size_t) e] == ChainRouting::branchB && mixDestination[(size_t) e] >= 0)
+                modSum[(size_t) mixDestination[(size_t) e]] += 2.0f;
 
     for (size_t d = 0; d < modSum.size(); ++d)
         if (! juce::exactlyEqual (modSum[d], modApplied[d]))

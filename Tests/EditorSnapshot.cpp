@@ -114,8 +114,10 @@ int main (int argc, char** argv)
         ChainProcessor chain;
         chain.prepareToPlay (48000.0, 512);
         chain.setRouting (templates[i].routing);
+        if (juce::String (templates[i].name) == "Wet/Dry/Wet")
+            chain.parameters.getParameter ("wetonly")->setValueNotifyingHost (1.0f);
         std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
-        save (*editor, folder.getChildFile ("Routing-" + juce::String (templates[i].name).removeCharacters (" |") + ".png"));
+        save (*editor, folder.getChildFile ("Routing-" + juce::String (templates[i].name).removeCharacters (" |/") + ".png"));
     }
 
     return 0;

@@ -119,18 +119,21 @@ private:
     std::atomic<float>* branchBalance = nullptr;
     std::atomic<float>* branchSpread = nullptr;
     std::atomic<float>* crossFeedback = nullptr;
+    std::atomic<float>* branchWidth = nullptr;
+    std::atomic<float>* wetOnly = nullptr;
+    std::array<int, ChainRouting::numEffects> mixDestination {};   // destination « Mix » de chaque effet (-1 : pas de Mix)
 
     // Branches A et B, et la sortie de B renvoyée vers l'entrée de A (retour croisé)
-    juce::AudioBuffer<float> laneA, laneB, feedbackLine;
+    juce::AudioBuffer<float> laneA, laneB, laneWet, laneEffect, feedbackLine;
     int feedbackPos = 0;
 
     // Gains de mélange lissés : tourner Balance ou Spread ne fait pas de clic
     std::array<juce::SmoothedValue<float>, 4> mixGains;   // A gauche, A droite, B gauche, B droite
-    juce::SmoothedValue<float> feedbackGain;
+    juce::SmoothedValue<float> feedbackGain, widthGain;
 
     void processLane (int lane, const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
     void processRouting (const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
-    void updateModulation (const juce::AudioBuffer<float>&, int startInBlock);
+    void updateModulation (const juce::AudioBuffer<float>&, int startInBlock, const ChainRouting::Routing&);
 
     // Position du morceau au début du bloc (pour caler les LFO)
     std::atomic<float> tempo { 120.0f };

@@ -261,6 +261,10 @@ namespace ChainRouting
             // Échos et réverbération en parallèle : la réverbe ne brouille pas les répétitions
             { "Delays | Reverb",
               make ({ filter, amp, harmonizer, reverse, layered, chorus }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
+            // Le rack de Bob Bradshaw : le son sec de l'ampli au centre, les effets à 100 % autour.
+            // Choisi dans le menu, il allume aussi « Wet Only » (branche B sans son sec)
+            { "Wet/Dry/Wet",
+              make ({ filter, amp }, {}, { harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb }, {}) },
             // Deux harmonies différentes, une à gauche et une à droite (avec Spread)
             { "Harmonizer | Layered",
               make ({ filter, amp }, { harmonizer, chorus }, { layered, reverse }, { delay, bandDelay, ultraTap, reverb }) },

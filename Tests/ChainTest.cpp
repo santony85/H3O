@@ -96,11 +96,11 @@ namespace
         return s;
     }
 
-    float maxDifference (const Signal& a, const Signal& b)
+    float maxDifference (const Signal& a, const Signal& b, size_t from = 0)
     {
         float d = 0.0f;
         for (int ch = 0; ch < 2; ++ch)
-            for (size_t i = 0; i < a[(size_t) ch].size(); ++i)
+            for (size_t i = from; i < a[(size_t) ch].size(); ++i)
                 d = std::max (d, std::abs (a[(size_t) ch][i] - b[(size_t) ch][i]));
         return d;
     }
@@ -633,6 +633,123 @@ namespace
         check (restored.getSlotDestination (0) == semi, "destination Harmonizer · demi-tons enregistrée puis relue");
     }
 
+    void wetDryWet()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Wet/Dry/Wet ---\n");
+        const auto dry = input();
+
+        const Routing* wdw = nullptr;
+        for (auto& t : templates())
+            if (std::string (t.name) == "Wet/Dry/Wet")
+                wdw = &t.routing;
+        check (wdw != nullptr && wdw->effectsIn (branchA).empty() && wdw->laneOf (amp) == pre && wdw->laneOf (reverb) == branchB,
+               "modèle Wet/Dry/Wet : ampli avant, A sec, effets dans B (réverbe comprise)");
+
+        // Un effet à 100 % à côté du son sec, tous deux à plein volume (Balance 50 %)
+        auto wetOf = [] (std::initializer_list<int> ids)
+        {
+            Signal sum;
+            for (auto id : ids)
+            {
+                std::unique_ptr<juce::AudioProcessor> fx;
+                if (id == delay)  fx = std::make_unique<DelayProcessor>();
+                if (id == reverb) fx = std::make_unique<ReverbProcessor>();
+                auto* apvts = id == delay ? &static_cast<DelayProcessor&> (*fx).parameters : &static_cast<ReverbProcessor&> (*fx).parameters;
+                auto* mix = apvts->getParameter ("mix");
+                mix->setValueNotifyingHost (1.0f);
+                const auto out = runSeries ({ fx.get() });
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    sum[(size_t) ch].resize (out[(size_t) ch].size(), 0.0f);
+                    for (size_t i = 0; i < out[(size_t) ch].size(); ++i)
+                        sum[(size_t) ch][i] += out[(size_t) ch][i];
+                }
+            }
+            return sum;
+        };
+
+        auto plusDry = [&dry] (const Signal& wet)
+        {
+            Signal s;
+            for (int ch = 0; ch < 2; ++ch)
+                for (size_t i = 0; i < dry[0].size(); ++i)
+                    s[(size_t) ch].push_back (dry[(size_t) ch][i] + wet[(size_t) ch][i]);
+            return s;
+        };
+
+        auto makeChain = [wdw] (ChainProcessor& chain, std::initializer_list<int> on)
+        {
+            onlyOn (chain, on);
+            chain.setRouting (*wdw);
+            setParam (chain, "wetonly", 1.0f);
+        };
+
+        {
+            ChainProcessor chain;
+            makeChain (chain, { delay });
+            const float baseMix = chain.delay.parameters.getRawParameterValue ("mix")->load();
+            const auto got = run (chain);
+            const auto expected = plusDry (wetOf ({ delay }));
+            std::printf ("        écart max %.2e dès le début, %.2e après 0,1 s\n", maxDifference (got, expected), maxDifference (got, expected, (size_t) (0.1 * rate)));
+            const float d = maxDifference (got, expected, (size_t) (0.1 * rate));
+            check (d < 1.0e-4f, "Wet Only : son sec + delay 100 % effet, chacun à plein volume");
+            check (chain.delay.parameters.getRawParameterValue ("mix")->load() == baseMix, "le Mix du Delay garde ton réglage");
+        }
+
+        {
+            ChainProcessor chain;
+            makeChain (chain, { delay, reverb });
+            const float d = maxDifference (run (chain), plusDry (wetOf ({ delay, reverb })), (size_t) (0.1 * rate));   // après le glissement du Mix
+            std::printf ("        écart max %.2e\n", d);
+            check (d < 1.0e-4f, "Wet Only : delay et réverbe côte à côte (la réverbe ne reçoit pas que les échos)");
+        }
+
+        // Balance 0 % : le son sec seul
+        {
+            ChainProcessor chain;
+            makeChain (chain, { delay, reverb });
+            setParam (chain, "branchbalance", 0.0f);
+            check (maxDifference (run (chain), dry) < 1.0e-5f, "Balance 0 % : le son sec seul");
+        }
+
+        // Width 0 % : les effets de B en mono (gauche = droite)
+        {
+            ChainProcessor chain;
+            makeChain (chain, { reverb });
+            setParam (chain, "branchbalance", 100.0f);
+            setParam (chain, "branchwidth", 0.0f);
+            const auto got = run (chain);
+            float side = 0.0f, level = 0.0f;
+            for (size_t i = (size_t) (0.1 * rate); i < got[0].size(); ++i)
+            {
+                side  = std::max (side, std::abs (got[0][i] - got[1][i]));
+                level = std::max (level, std::abs (got[0][i]));
+            }
+            std::printf ("        écart gauche/droite %.2e (niveau %.3f)\n", side, level);
+            check (side < 1.0e-5f && level > 1.0e-3f, "Width 0 % : effets en mono");
+
+            ChainProcessor wide;
+            makeChain (wide, { reverb });
+            setParam (wide, "branchbalance", 100.0f);
+            setParam (wide, "branchwidth", 200.0f);
+            ChainProcessor normal;
+            makeChain (normal, { reverb });
+            setParam (normal, "branchbalance", 100.0f);
+
+            auto sideLevel = [] (const Signal& s)
+            {
+                double e = 0.0;
+                for (size_t i = 0; i < s[0].size(); ++i)
+                    e += 0.25 * (s[0][i] - s[1][i]) * (s[0][i] - s[1][i]);
+                return e;
+            };
+            const double ratio = sideLevel (run (wide)) / sideLevel (run (normal));
+            std::printf ("        énergie stéréo ×%.2f\n", ratio);
+            check (std::abs (ratio - 4.0) < 0.05, "Width 200 % : la stéréo des effets doublée");
+        }
+    }
+
     void sessions()
     {
         using namespace ChainRouting;
@@ -676,6 +793,7 @@ int main()
     modulationMatrix();
     tempoSync();
     steppedModulation();
+    wetDryWet();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");
     return failures == 0 ? 0 : 1;

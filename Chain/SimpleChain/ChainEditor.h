@@ -95,7 +95,10 @@ private:
     PedalLook pedalLook;   // déclaré avant les pédales : détruit après leurs boutons
 
     std::vector<Pedal> pedals;   // indexé par ChainRouting::Effect
-    BranchControl balance, spread, crossFeedback;
+    BranchControl balance, spread, branchWidth, crossFeedback;
+    juce::ToggleButton wetOnlyButton { "B Wet Only" };   // Wet/Dry/Wet : effets de B à 100 %, côte à côte
+    std::unique_ptr<ButtonAttachment> wetOnlyAttachment;
+    void setParameter (const juce::String& id, float value);
     int selected = 0;   // pédale affichée, ou -1 pour la matrice de modulation
 
     // Schéma : routage affiché, séparation et fusion des branches, cases des branches vides
