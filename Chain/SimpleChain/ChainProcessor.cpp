@@ -582,8 +582,9 @@ juce::AudioProcessorEditor* ChainProcessor::createEditor()
     return new ChainEditor (*this);
 }
 
-// L'état de la chaîne = ses propres paramètres + l'état complet de chaque effet
-void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
+// L'état de la chaîne = ses propres paramètres + l'état complet de chaque effet.
+// Le même contenu sert aux sessions de Logic (en binaire) et aux fichiers de presets (en XML).
+juce::ValueTree ChainProcessor::createState()
 {
     juce::ValueTree state ("SIMPLE_CHAIN");
     state.appendChild (parameters.copyState(), nullptr);
@@ -621,21 +622,38 @@ void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
                            juce::isPositiveAndBelow (d, (int) destinations.size()) ? destinations[(size_t) d].key : juce::String(), nullptr);
     }
 
-    if (auto xml = state.createXml())
+    state.setProperty ("presetname", presetName, nullptr);
+    return state;
+}
+
+void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    if (auto xml = createState().createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void ChainProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     auto xml = getXmlFromBinary (data, sizeInBytes);
-    if (xml == nullptr || ! xml->hasTagName ("SIMPLE_CHAIN"))
-        return;
+    if (xml != nullptr && xml->hasTagName ("SIMPLE_CHAIN"))
+        restoreState (juce::ValueTree::fromXml (*xml), false);
+}
 
-    const auto state = juce::ValueTree::fromXml (*xml);
+bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
+{
+    if (! state.hasType ("SIMPLE_CHAIN"))
+        return false;
+
+    // Un preset ne change pas l'entrée : elle dépend de ton branchement (guitare sur l'entrée 2…), pas du son
+    auto* inputParam = parameters.getParameter ("input");
+    const float currentInput = inputParam->getValue();
 
     const auto own = state.getChildWithName (parameters.state.getType());
     if (own.isValid())
         parameters.replaceState (own);
+
+    if (keepInput)
+        inputParam->setValueNotifyingHost (currentInput);
 
     auto restore = [&state] (const juce::Identifier& key, juce::AudioProcessor& fx)
     {
@@ -662,6 +680,9 @@ void ChainProcessor::setStateInformation (const void* data, int sizeInBytes)
     // Absentes des anciennes sessions : aucune modulation
     for (int slot = 0; slot < numSlots; ++slot)
         slotDestination[(size_t) slot] = findDestination (state.getProperty ("mod" + juce::String (slot + 1) + "dest").toString());
+
+    presetName = state.getProperty ("presetname").toString();
+    return true;
 }
 
 // Point d'entrée appelé par Logic pour créer le plugin

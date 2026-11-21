@@ -14,6 +14,7 @@
 #include "ChainRouting.h"
 #include "ModulationSources.h"
 #include "Common/ModTargets.h"
+#include "ChainPresets.h"
 
 // Multi-effets : fait passer le son dans chaque effet, dans l'ordre choisi,
 // avec deux branches parallèles A et B possibles (voir ChainRouting.h).
@@ -46,6 +47,15 @@ public:
 
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+
+    // État complet (paramètres, effets, routage, modulation) : sessions et presets.
+    // keepInput : garde l'entrée actuelle (chargement d'un preset)
+    juce::ValueTree createState();
+    bool restoreState (const juce::ValueTree&, bool keepInput);
+
+    // Nom du preset chargé ou enregistré en dernier (vide : aucun). Gardé avec la session.
+    juce::String presetName;
+    ChainPresets presets { *this };
 
     // Paramètres propres à la chaîne : activer / court-circuiter chaque effet
     juce::AudioProcessorValueTreeState parameters;

@@ -58,7 +58,7 @@ int main (int argc, char** argv)
 
         // Une image de la chaîne par pédale affichée : on « clique » sur son nom
         for (auto* child : editor->getChildren())
-            if (auto* button = dynamic_cast<juce::TextButton*> (child); button != nullptr && button->getName() != "routing")
+            if (auto* button = dynamic_cast<juce::TextButton*> (child); button != nullptr && button->getName() != "routing" && button->getName() != "preset")
             {
                 button->onClick();
                 save (*editor, folder.getChildFile ("Chain-" + button->getButtonText().removeCharacters (" -") + ".png"));
@@ -99,6 +99,7 @@ int main (int argc, char** argv)
             chain.processBlock (buffer, midi);
         }
 
+        chain.presetName = "Lead Solo LA";   // nom de preset affiché dans l'en-tête
         std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
         for (auto* child : editor->getChildren())
             if (auto* button = dynamic_cast<juce::TextButton*> (child); button != nullptr && button->getButtonText() == "Modulation")

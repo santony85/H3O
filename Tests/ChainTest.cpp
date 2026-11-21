@@ -750,6 +750,98 @@ namespace
         }
     }
 
+    void presets()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Presets ---\n");
+
+        const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ChainTestPresets");
+        folder.deleteRecursively();
+
+        // Un son complet : routage, réglages d'une pédale, modulation, branches
+        ChainProcessor original;
+        original.presets.setFolder (folder);
+        for (auto& t : templates())
+            if (std::string (t.name) == "Wet/Dry/Wet")
+                original.setRouting (t.routing);
+        setParam (original, "wetonly", 1.0f);
+        setParam (original, "branchwidth", 150.0f);
+        setParam (original, "reverbon", 1.0f);
+        original.delay.parameters.getParameter ("mix")->setValueNotifyingHost (0.8f);
+        setParam (original, "mod1source", (float) ModulationSources::lfo1);
+        original.setSlotDestination (0, original.findDestination ("delay/time"));
+
+        check (original.presets.save ("Lead / Solo").isEmpty(), "enregistrer « Lead / Solo »");
+        const auto file = original.presets.fileFor ("Lead / Solo");
+        check (file.existsAsFile() && file.getParentDirectory() == folder && ! file.getFileName().contains ("/"),
+               "un fichier .scpreset dans le dossier des presets (nom de fichier valide)");
+        check (original.presetName == file.getFileNameWithoutExtension(), "le preset enregistré devient le preset actuel");
+        check (original.presets.save ("   ").isNotEmpty(), "nom vide refusé");
+
+        // Une autre chaîne, branchée en Mono (R), charge le preset
+        ChainProcessor other;
+        other.presets.setFolder (folder);
+        setParam (other, "input", 2.0f);   // Mono (R)
+        check (other.presets.load (file).isEmpty(), "charger le preset");
+
+        auto comparable = [] (ChainProcessor& c)
+        {
+            auto state = c.createState();
+            state.removeProperty ("presetname", nullptr);
+            auto params = state.getChildWithName ("CHAIN_PARAMETERS");
+            for (int i = params.getNumChildren(); --i >= 0;)
+                if (params.getChild (i).getProperty ("id").toString() == "input")
+                    params.removeChild (i, nullptr);
+            return state.toXmlString();
+        };
+
+        check (comparable (other) == comparable (original), "le son chargé est identique (pédales, routage, modulation, branches)");
+        check (other.getRouting() == original.getRouting() && other.getSlotDestination (0) == original.getSlotDestination (0)
+               && other.delay.parameters.getParameter ("mix")->getValue() == 0.8f,
+               "routage, ligne de modulation et Mix du Delay retrouvés");
+        check ((int) other.parameters.getRawParameterValue ("input")->load() == 2, "l'entrée reste Mono (R) : le preset ne la change pas");
+        check (other.presetName == original.presetName, "le nom du preset chargé est affiché");
+
+        // Le nom du preset est gardé avec la session
+        juce::MemoryBlock session;
+        other.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (reopened.presetName == original.presetName, "la session se souvient du preset");
+
+        // Plusieurs presets : ordre alphabétique (naturel), précédent / suivant en boucle
+        original.presets.save ("Clean");
+        original.presets.save ("Ambient 2");
+        original.presets.save ("Ambient 10");
+        juce::StringArray names;
+        for (auto& f : original.presets.list())
+            names.add (f.getFileNameWithoutExtension());
+        std::printf ("        %s\n", names.joinIntoString (", ").toRawUTF8());
+        check (names.joinIntoString ("|") == "Ambient 2|Ambient 10|Clean|Lead - Solo", "liste par ordre alphabétique (2 avant 10)");
+
+        original.presetName = "Clean";
+        check (original.presets.neighbour (1).getFileNameWithoutExtension() == "Lead - Solo"
+               && original.presets.neighbour (-1).getFileNameWithoutExtension() == "Ambient 10", "précédent et suivant");
+        original.presetName = "Lead - Solo";
+        check (original.presets.neighbour (1).getFileNameWithoutExtension() == "Ambient 2", "après le dernier : retour au premier");
+
+        // Enregistrer sous le même nom remplace le preset
+        setParam (original, "branchbalance", 20.0f);
+        original.presets.save ("Clean");
+        ChainProcessor check2;
+        check2.presets.load (original.presets.fileFor ("Clean"));
+        check (std::abs (check2.parameters.getRawParameterValue ("branchbalance")->load() - 20.0f) < 0.01f
+               && original.presets.list().size() == 4, "même nom : le preset est remplacé");
+
+        // Un fichier qui n'est pas un preset ne change rien
+        const auto junk = folder.getChildFile (juce::String ("junk") + ChainPresets::extension);
+        junk.replaceWithText ("<NOT_A_PRESET/>");
+        const auto before = comparable (check2);
+        check (check2.presets.load (junk).isNotEmpty() && comparable (check2) == before, "fichier invalide : refusé, rien ne change");
+
+        folder.deleteRecursively();
+    }
+
     void sessions()
     {
         using namespace ChainRouting;
@@ -794,6 +886,7 @@ int main()
     tempoSync();
     steppedModulation();
     wetDryWet();
+    presets();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");
     return failures == 0 ? 0 : 1;

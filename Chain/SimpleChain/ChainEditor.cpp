@@ -30,6 +30,19 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     modulationButton.onClick = [this] { select (-1); };
     addAndMakeVisible (modulationButton);
 
+    for (auto* b : { &presetButton, &previousPreset, &nextPreset })
+        b->setName ("preset");
+    presetButton.setTooltip ("Your presets: load, save, delete");
+    presetButton.onClick = [this] { showPresetMenu(); };
+    previousPreset.setTooltip ("Previous preset");
+    nextPreset.setTooltip ("Next preset");
+    previousPreset.onClick = [this] { loadPreset (chain.presets.neighbour (-1)); };
+    nextPreset.onClick     = [this] { loadPreset (chain.presets.neighbour (1)); };
+    for (auto* b : { &previousPreset, &presetButton, &nextPreset })
+        addAndMakeVisible (b);
+    previousPreset.setLookAndFeel (&pedalLook);   // police plus petite : les flèches tiennent
+    nextPreset.setLookAndFeel (&pedalLook);
+
     modulationPanel = std::make_unique<ModulationPanel> (chain);
     addChildComponent (*modulationPanel);
 
@@ -82,6 +95,9 @@ ChainEditor::ChainEditor (ChainProcessor& p)
 
 ChainEditor::~ChainEditor()
 {
+    previousPreset.setLookAndFeel (nullptr);
+    nextPreset.setLookAndFeel (nullptr);
+
     // Les interfaces des effets doivent disparaître avant le reste
     for (auto& pedal : pedals)
         pedal.editor.reset();
@@ -211,6 +227,145 @@ void ChainEditor::setParameter (const juce::String& id, float value)
         param->setValueNotifyingHost (param->convertTo0to1 (value));
         param->endChangeGesture();
     }
+}
+
+//==============================================================================
+// Presets
+
+void ChainEditor::showPresetMenu()
+{
+    const auto files = chain.presets.list();
+    const auto current = chain.presets.fileFor (chain.presetName);
+    const bool hasCurrent = chain.presetName.isNotEmpty() && current.existsAsFile();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Presets");
+    if (files.isEmpty())
+        menu.addItem (-1, "No presets yet: use Save As", false, false);
+
+    for (int i = 0; i < files.size(); ++i)
+        menu.addItem (i + 1, files[i].getFileNameWithoutExtension(), true, files[i] == current);
+
+    menu.addSeparator();
+    menu.addItem (10001, hasCurrent ? "Save \"" + chain.presetName + "\"" : juce::String ("Save"), hasCurrent);
+    menu.addItem (10002, juce::String::fromUTF8 ("Save As\xe2\x80\xa6"));
+    menu.addItem (10003, hasCurrent ? juce::String::fromUTF8 ("Delete \"") + chain.presetName + juce::String::fromUTF8 ("\"\xe2\x80\xa6")
+                                    : juce::String ("Delete"), hasCurrent);
+    menu.addSeparator();
+    menu.addItem (10004, "Show presets folder in Finder");
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetButton),
+                        [safe = juce::Component::SafePointer<ChainEditor> (this), files] (int result)
+    {
+        if (safe == nullptr || result == 0)
+            return;
+
+        if (result > 0 && result <= files.size())
+            safe->loadPreset (files[result - 1]);
+        else if (result == 10001)
+            safe->savePreset (safe->chain.presetName, false);
+        else if (result == 10002)
+            safe->savePresetAs();
+        else if (result == 10003)
+            safe->deletePreset();
+        else if (result == 10004)
+        {
+            const auto folder = safe->chain.presets.getFolder();
+            folder.createDirectory();
+            folder.startAsProcess();
+        }
+    });
+}
+
+void ChainEditor::loadPreset (const juce::File& file)
+{
+    if (file == juce::File())
+        return showError ("No presets yet: use Save As in the preset menu.");
+
+    if (const auto error = chain.presets.load (file); error.isNotEmpty())
+        return showError (error);
+
+    timerCallback();   // schéma, routage et modulation à jour tout de suite
+}
+
+void ChainEditor::savePresetAs()
+{
+    presetDialog = std::make_unique<juce::AlertWindow> ("Save preset", "Name of the preset:", juce::MessageBoxIconType::NoIcon, this);
+    presetDialog->addTextEditor ("name", chain.presetName);
+    presetDialog->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    presetDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    presetDialog->enterModalState (true, juce::ModalCallbackFunction::create (
+        [safe = juce::Component::SafePointer<ChainEditor> (this)] (int result)
+        {
+            if (safe == nullptr || safe->presetDialog == nullptr)
+                return;
+
+            const auto name = safe->presetDialog->getTextEditorContents ("name");
+            safe->presetDialog.reset();
+
+            if (result == 1)
+                safe->savePreset (name, true);
+        }));
+}
+
+void ChainEditor::savePreset (const juce::String& name, bool confirmReplace)
+{
+    // Un autre preset porte déjà ce nom : on demande avant de le remplacer
+    if (confirmReplace && chain.presets.exists (name)
+        && chain.presets.fileFor (name).getFileNameWithoutExtension() != chain.presetName)
+    {
+        const auto existing = chain.presets.fileFor (name).getFileNameWithoutExtension();
+        confirm ("Replace preset?", "A preset called \"" + existing + "\" already exists. Replace it with the current sound?", "Replace",
+                 [this, name] { savePreset (name, false); });
+        return;
+    }
+
+    if (const auto error = chain.presets.save (name); error.isNotEmpty())
+        showError (error);
+
+    timerCallback();
+}
+
+void ChainEditor::deletePreset()
+{
+    const auto file = chain.presets.fileFor (chain.presetName);
+    confirm ("Delete preset?", "\"" + chain.presetName + "\" will be moved to the Trash (you can still get it back from there).",
+             "Move to Trash", [this, file]
+             {
+                 if (! chain.presets.remove (file))
+                     showError ("Couldn't move " + file.getFileName() + " to the Trash.");
+                 timerCallback();
+             });
+}
+
+// Boîte « OK / Annuler » ; onOk n'est appelé que sur OK, et jamais si l'interface a été fermée entre-temps
+void ChainEditor::confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void()> onOk)
+{
+    messageBox = juce::AlertWindow::showScopedAsync (juce::MessageBoxOptions()
+                                                         .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                                         .withTitle (title)
+                                                         .withMessage (message)
+                                                         .withButton (okText, 1)
+                                                         .withButton ("Cancel", 0)
+                                                         .withAssociatedComponent (this),
+                                                     [safe = juce::Component::SafePointer<ChainEditor> (this), onOk] (int result)
+                                                     {
+                                                         // Après la fermeture de la boîte (onOk peut en ouvrir une autre)
+                                                         if (safe != nullptr && result == 1)
+                                                             juce::MessageManager::callAsync ([safe, onOk] { if (safe != nullptr) onOk(); });
+                                                     });
+}
+
+void ChainEditor::showError (const juce::String& message)
+{
+    messageBox = juce::AlertWindow::showScopedAsync (juce::MessageBoxOptions()
+                                                         .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                                         .withTitle ("Presets")
+                                                         .withMessage (message)
+                                                         .withButton ("OK", 0)
+                                                         .withAssociatedComponent (this),
+                                                     nullptr);
 }
 
 void ChainEditor::showPedalMenu (int effect)
@@ -356,6 +511,12 @@ void ChainEditor::timerCallback()
 {
     for (int i = 0; i < (int) pedals.size(); ++i)
         pedals[(size_t) i].editor->setAlpha (chain.isEffectOn (i) ? 1.0f : 0.35f);
+
+    // Nom du preset (chargé, enregistré, ou session rouverte)
+    const auto presetText = (chain.presetName.isNotEmpty() ? chain.presetName : juce::String ("No preset"))
+                            + "  " + juce::String::fromUTF8 ("\xe2\x96\xbe");
+    if (presetButton.getButtonText() != presetText)
+        presetButton.setButtonText (presetText);
 
     // Routage changé ailleurs (session rechargée, automation…)
     const auto current = chain.getRouting();
@@ -629,6 +790,13 @@ void ChainEditor::resized()
     routingButton.setBounds (header.removeFromLeft (230).reduced (0, 7));
     header.removeFromLeft (8);
     modulationButton.setBounds (header.removeFromLeft (110).reduced (0, 7));
+
+    // ◀ Preset ▶ : la place qui reste avant Input
+    header.removeFromLeft (12);
+    header.removeFromRight (8);
+    previousPreset.setBounds (header.removeFromLeft (30).reduced (0, 7));
+    nextPreset.setBounds (header.removeFromRight (30).reduced (0, 7));
+    presetButton.setBounds (header.reduced (2, 7));
 
     auto strip = getLocalBounds().withTrimmedTop (headerHeight).removeFromTop (stripHeight - 3);
     diagram = strip.removeFromTop (diagramHeight).reduced (10, 0);

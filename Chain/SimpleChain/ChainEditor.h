@@ -15,7 +15,8 @@
 // - clic droit sur une pédale : menu pour la ranger ou la décaler ;
 // - le menu Routing propose des routages tout prêts ;
 // - Balance, Spread et Cross Feedback règlent le mélange des deux branches ;
-// - le bouton Modulation affiche la matrice de modulation (un point violet marque les pédales modulées).
+// - le bouton Modulation affiche la matrice de modulation (un point violet marque les pédales modulées) ;
+// - ◀ Preset ▶ : charger, enregistrer, parcourir tes presets.
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer
 {
@@ -67,6 +68,16 @@ private:
     void applyRouting (const ChainRouting::Routing&);
     void layoutDiagram();
     void showRoutingMenu();
+
+    // Presets
+    void showPresetMenu();
+    void loadPreset (const juce::File&);
+    void savePresetAs();
+    void savePreset (const juce::String& name, bool confirmReplace);
+    void deletePreset();
+    void showError (const juce::String&);
+    void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void()> onOk);
+    juce::ScopedMessageBox messageBox;   // se ferme avec l'interface
     void showPedalMenu (int effect);
     juce::String routingName() const;
 
@@ -81,6 +92,8 @@ private:
     ChainProcessor& chain;
     InputMode::Box inputBox { chain.parameters, juce::Colours::white };
     juce::TextButton routingButton, modulationButton;
+    juce::TextButton presetButton, previousPreset { juce::String::fromUTF8 ("\xe2\x97\x80") }, nextPreset { juce::String::fromUTF8 ("\xe2\x96\xb6") };
+    std::unique_ptr<juce::AlertWindow> presetDialog;
     std::unique_ptr<ModulationPanel> modulationPanel;
     juce::TooltipWindow tooltips { this, 600 };
 
