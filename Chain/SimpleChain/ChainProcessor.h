@@ -11,8 +11,10 @@
 #include "BandDelay/BandDelayProcessor.h"
 #include "UltraTap/UltraTapProcessor.h"
 #include "Reverb/ReverbProcessor.h"
+#include "ChainRouting.h"
 
-// Multi-effets : fait passer le son dans chaque effet, l'un après l'autre.
+// Multi-effets : fait passer le son dans chaque effet, dans l'ordre choisi,
+// avec deux branches parallèles A et B possibles (voir ChainRouting.h).
 // Les effets sont les mêmes classes que dans les plugins séparés.
 class ChainProcessor : public juce::AudioProcessor
 {
@@ -47,7 +49,7 @@ public:
     juce::AudioProcessorValueTreeState parameters;
     InputMode::Selector input;
 
-    // Les effets, dans l'ordre du signal
+    // Les effets (dans leur ordre d'origine : celui de ChainRouting::Effect)
     SweptFilterProcessor filter;
     AmpProcessor amp;
     HarmonizerProcessor harmonizer;
@@ -70,7 +72,33 @@ public:
     bool isUltraTapOn() const noexcept   { return ultraTapOn->load() >= 0.5f; }
     bool isReverbOn() const noexcept     { return reverbOn->load() >= 0.5f; }
 
+    // Routage : modifiable depuis l'interface pendant que le son passe
+    ChainRouting::Routing getRouting() const noexcept { return ChainRouting::Routing::unpack (routing.load()); }
+    void setRouting (const ChainRouting::Routing&);
+
+    juce::AudioProcessor& effect (int id) noexcept { return *effects[(size_t) id]; }
+    bool isEffectOn (int id) const noexcept        { return onParams[(size_t) id]->load() >= 0.5f; }
+    static const char* onParamId (int id);
+
 private:
+    std::array<juce::AudioProcessor*, ChainRouting::numEffects> effects {};
+    std::array<std::atomic<float>*, ChainRouting::numEffects> onParams {};
+    std::atomic<std::uint64_t> routing { ChainRouting::Routing::series().pack() };
+
+    std::atomic<float>* branchBalance = nullptr;
+    std::atomic<float>* branchSpread = nullptr;
+    std::atomic<float>* crossFeedback = nullptr;
+
+    // Branches A et B, et la sortie de B renvoyée vers l'entrée de A (retour croisé)
+    juce::AudioBuffer<float> laneA, laneB, feedbackLine;
+    int feedbackPos = 0;
+
+    // Gains de mélange lissés : tourner Balance ou Spread ne fait pas de clic
+    std::array<juce::SmoothedValue<float>, 4> mixGains;   // A gauche, A droite, B gauche, B droite
+    juce::SmoothedValue<float> feedbackGain;
+
+    void processLane (int lane, const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
+
     std::atomic<float>* harmonizerOn = nullptr;
     std::atomic<float>* ampOn = nullptr;
     std::atomic<float>* filterOn = nullptr;

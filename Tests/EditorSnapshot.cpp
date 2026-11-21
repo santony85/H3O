@@ -58,11 +58,22 @@ int main (int argc, char** argv)
 
         // Une image de la chaîne par pédale affichée : on « clique » sur son nom
         for (auto* child : editor->getChildren())
-            if (auto* button = dynamic_cast<juce::TextButton*> (child))
+            if (auto* button = dynamic_cast<juce::TextButton*> (child); button != nullptr && button->getName() != "routing")
             {
                 button->onClick();
                 save (*editor, folder.getChildFile ("Chain-" + button->getButtonText().removeCharacters (" -") + ".png"));
             }
+    }
+
+    // Les routages tout prêts : le schéma avec ses branches
+    const auto& templates = ChainRouting::templates();
+    for (size_t i = 1; i < templates.size(); ++i)
+    {
+        ChainProcessor chain;
+        chain.prepareToPlay (48000.0, 512);
+        chain.setRouting (templates[i].routing);
+        std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
+        save (*editor, folder.getChildFile ("Routing-" + juce::String (templates[i].name).removeCharacters (" |") + ".png"));
     }
 
     return 0;

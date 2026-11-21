@@ -19,6 +19,16 @@ ChainProcessor::ChainProcessor()
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "banddelayon", 1 }, "Band Delay On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ultratapon", 1 }, "Ultra-Tap On", false),
                       std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverbon", 1 }, "Reverb On", false),
+                      // Branches parallèles A et B
+                      std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchbalance", 1 }, "Branch Balance",
+                                                                   juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f,
+                                                                   juce::AudioParameterFloatAttributes().withLabel ("%")),
+                      std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchspread", 1 }, "Branch Spread",
+                                                                   juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f,
+                                                                   juce::AudioParameterFloatAttributes().withLabel ("%")),
+                      std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "crossfeedback", 1 }, "Cross Feedback",
+                                                                   juce::NormalisableRange<float> (0.0f, 90.0f, 0.1f), 0.0f,
+                                                                   juce::AudioParameterFloatAttributes().withLabel ("%")),
                   })
 {
     harmonizerOn = parameters.getRawParameterValue ("harmonizeron");
@@ -31,6 +41,14 @@ ChainProcessor::ChainProcessor()
     bandDelayOn  = parameters.getRawParameterValue ("banddelayon");
     ultraTapOn   = parameters.getRawParameterValue ("ultratapon");
     reverbOn     = parameters.getRawParameterValue ("reverbon");
+
+    branchBalance = parameters.getRawParameterValue ("branchbalance");
+    branchSpread  = parameters.getRawParameterValue ("branchspread");
+    crossFeedback = parameters.getRawParameterValue ("crossfeedback");
+
+    // Même ordre que ChainRouting::Effect
+    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb };
+    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn };
 
     // C'est la chaîne qui choisit l'entrée ; les effets reçoivent déjà de la stéréo
     input.attach (parameters);
@@ -46,6 +64,24 @@ ChainProcessor::ChainProcessor()
     reverb.input.setInsideChain();
 }
 
+const char* ChainProcessor::onParamId (int id)
+{
+    static const char* ids[] = { "filteron", "ampon", "harmonizeron", "reverseon", "layeredon",
+                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon" };
+    return ids[juce::jlimit (0, ChainRouting::numEffects - 1, id)];
+}
+
+void ChainProcessor::setRouting (const ChainRouting::Routing& r)
+{
+    auto copy = r;
+    copy.normalise();
+    if (copy.pack() == routing.exchange (copy.pack()))
+        return;
+
+    // La session a changé : Logic propose de l'enregistrer
+    updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+}
+
 bool ChainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     // Entrée mono (guitare) ou stéréo, sortie toujours stéréo
@@ -55,32 +91,55 @@ bool ChainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Les effets internes travaillent toujours en stéréo
-    for (juce::AudioProcessor* fx : { (juce::AudioProcessor*) &filter, (juce::AudioProcessor*) &amp, (juce::AudioProcessor*) &harmonizer, (juce::AudioProcessor*) &reverse, (juce::AudioProcessor*) &layered, (juce::AudioProcessor*) &chorus, (juce::AudioProcessor*) &delay, (juce::AudioProcessor*) &bandDelay, (juce::AudioProcessor*) &ultraTap, (juce::AudioProcessor*) &reverb })
+    for (auto* fx : effects)
     {
         // Pas de tête de lecture hors de processBlock (voir plus bas)
         fx->setPlayHead (nullptr);
         fx->setRateAndBufferSizeDetails (sampleRate, samplesPerBlock);
         fx->prepareToPlay (sampleRate, samplesPerBlock);
     }
+
+    const int size = juce::jmax (1, samplesPerBlock);
+    laneA.setSize (2, size);
+    laneB.setSize (2, size);
+
+    // Le retour croisé a un bloc de retard : la sortie de B n'existe qu'une fois A calculé
+    feedbackLine.setSize (2, size);
+    feedbackLine.clear();
+    feedbackPos = 0;
+
+    const float balance = branchBalance->load() * 0.01f, spread = branchSpread->load() * 0.01f;
+    const float start[] = { (1.0f - balance) * (1.0f + spread), (1.0f - balance) * (1.0f - spread),
+                            balance * (1.0f - spread), balance * (1.0f + spread) };
+    for (size_t i = 0; i < mixGains.size(); ++i)
+    {
+        mixGains[i].reset (sampleRate, 0.03);
+        mixGains[i].setCurrentAndTargetValue (start[i]);
+    }
+    feedbackGain.reset (sampleRate, 0.03);
+    feedbackGain.setCurrentAndTargetValue (crossFeedback->load() * 0.01f);
 }
 
 void ChainProcessor::releaseResources()
 {
-    harmonizer.releaseResources();
-    amp.releaseResources();
-    filter.releaseResources();
-    reverse.releaseResources();
-    layered.releaseResources();
-    chorus.releaseResources();
-    delay.releaseResources();
-    bandDelay.releaseResources();
-    ultraTap.releaseResources();
-    reverb.releaseResources();
+    for (auto* fx : effects)
+        fx->releaseResources();
 }
 
 double ChainProcessor::getTailLengthSeconds() const
 {
-    return filter.getTailLengthSeconds() + amp.getTailLengthSeconds() + harmonizer.getTailLengthSeconds() + reverse.getTailLengthSeconds() + layered.getTailLengthSeconds() + chorus.getTailLengthSeconds() + delay.getTailLengthSeconds() + bandDelay.getTailLengthSeconds() + ultraTap.getTailLengthSeconds() + reverb.getTailLengthSeconds();
+    double tail = 0.0;
+    for (auto* fx : effects)
+        tail += fx->getTailLengthSeconds();
+    return tail;
+}
+
+// Les effets allumés d'une section, dans l'ordre choisi
+void ChainProcessor::processLane (int lane, const ChainRouting::Routing& r, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
+    for (auto id : r.order)
+        if (r.lane[id] == lane && isEffectOn (id))
+            effects[id]->processBlock (buffer, midi);
 }
 
 void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -95,58 +154,94 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     // Elle n'est valable que pendant ce bloc : certains hôtes la détruisent ensuite.
     // On la retire donc à la fin, sinon les effets garderaient un pointeur invalide.
     auto* playHead = getPlayHead();
-    harmonizer.setPlayHead (playHead);
-    amp.setPlayHead (playHead);
-    filter.setPlayHead (playHead);
-    reverse.setPlayHead (playHead);
-    layered.setPlayHead (playHead);
-    chorus.setPlayHead (playHead);
-    delay.setPlayHead (playHead);
-    bandDelay.setPlayHead (playHead);
-    ultraTap.setPlayHead (playHead);
-    reverb.setPlayHead (playHead);
+    for (auto* fx : effects)
+        fx->setPlayHead (playHead);
 
-    // Le filtre d'abord, comme une wah branchée avant l'ampli : il réagit au jeu brut
-    if (isFilterOn())
-        filter.processBlock (buffer, midi);
+    const auto r = getRouting();   // lu une seule fois : le même routage pour tout le bloc
+    const int n = buffer.getNumSamples();
 
-    if (isAmpOn())
-        amp.processBlock (buffer, midi);
+    processLane (ChainRouting::pre, r, buffer, midi);
 
-    if (isHarmonizerOn())
-        harmonizer.processBlock (buffer, midi);
+    if (r.hasParallel() && buffer.getNumChannels() >= 2)
+    {
+        // Normalement jamais : l'hôte ne dépasse pas la taille annoncée dans prepareToPlay
+        if (n > laneA.getNumSamples())
+        {
+            laneA.setSize (2, n, false, false, true);
+            laneB.setSize (2, n, false, false, true);
+        }
 
-    if (isReverseOn())
-        reverse.processBlock (buffer, midi);
+        juce::AudioBuffer<float> a (laneA.getArrayOfWritePointers(), 2, n);
+        juce::AudioBuffer<float> b (laneB.getArrayOfWritePointers(), 2, n);
 
-    if (isLayeredOn())
-        layered.processBlock (buffer, midi);
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            a.copyFrom (ch, 0, buffer, ch, 0, n);
+            b.copyFrom (ch, 0, buffer, ch, 0, n);
+        }
 
-    if (isChorusOn())
-        chorus.processBlock (buffer, midi);
+        // Retour croisé : la sortie de B, un bloc plus tôt, réinjectée dans A (adoucie pour ne jamais s'emballer)
+        feedbackGain.setTargetValue (crossFeedback->load() * 0.01f);
+        const bool feedback = feedbackGain.isSmoothing() || feedbackGain.getTargetValue() > 0.0f;
+        const int lineSize = feedbackLine.getNumSamples();
 
-    if (isDelayOn())
-        delay.processBlock (buffer, midi);
+        if (feedback)
+        {
+            auto* left = a.getWritePointer (0);
+            auto* right = a.getWritePointer (1);
+            const auto* lineL = feedbackLine.getReadPointer (0);
+            const auto* lineR = feedbackLine.getReadPointer (1);
+            for (int i = 0; i < n; ++i)
+            {
+                const float g = feedbackGain.getNextValue();
+                const int pos = (feedbackPos + i) % lineSize;
+                left[i]  += g * std::tanh (lineL[pos]);
+                right[i] += g * std::tanh (lineR[pos]);
+            }
+        }
+        else
+        {
+            feedbackGain.skip (n);
+        }
 
-    if (isBandDelayOn())
-        bandDelay.processBlock (buffer, midi);
+        processLane (ChainRouting::branchA, r, a, midi);
+        processLane (ChainRouting::branchB, r, b, midi);
 
-    if (isUltraTapOn())
-        ultraTap.processBlock (buffer, midi);
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            auto* line = feedbackLine.getWritePointer (ch);
+            const auto* src = b.getReadPointer (ch);
+            for (int i = 0; i < n; ++i)
+                line[(feedbackPos + i) % lineSize] = feedback ? src[i] : 0.0f;
+        }
+        feedbackPos = (feedbackPos + n) % lineSize;
 
-    if (isReverbOn())
-        reverb.processBlock (buffer, midi);
+        // Mélange : Balance dose A et B, Spread envoie A à gauche et B à droite
+        const float balance = branchBalance->load() * 0.01f;
+        const float spread  = branchSpread->load() * 0.01f;
+        mixGains[0].setTargetValue ((1.0f - balance) * (1.0f + spread));   // A à gauche
+        mixGains[1].setTargetValue ((1.0f - balance) * (1.0f - spread));   // A à droite
+        mixGains[2].setTargetValue (balance * (1.0f - spread));            // B à gauche
+        mixGains[3].setTargetValue (balance * (1.0f + spread));            // B à droite
 
-    harmonizer.setPlayHead (nullptr);
-    amp.setPlayHead (nullptr);
-    filter.setPlayHead (nullptr);
-    reverse.setPlayHead (nullptr);
-    layered.setPlayHead (nullptr);
-    chorus.setPlayHead (nullptr);
-    delay.setPlayHead (nullptr);
-    bandDelay.setPlayHead (nullptr);
-    ultraTap.setPlayHead (nullptr);
-    reverb.setPlayHead (nullptr);
+        auto* outL = buffer.getWritePointer (0);
+        auto* outR = buffer.getWritePointer (1);
+        const auto* aL = a.getReadPointer (0);
+        const auto* aR = a.getReadPointer (1);
+        const auto* bL = b.getReadPointer (0);
+        const auto* bR = b.getReadPointer (1);
+
+        for (int i = 0; i < n; ++i)
+        {
+            outL[i] = mixGains[0].getNextValue() * aL[i] + mixGains[2].getNextValue() * bL[i];
+            outR[i] = mixGains[1].getNextValue() * aR[i] + mixGains[3].getNextValue() * bR[i];
+        }
+    }
+
+    processLane (ChainRouting::post, r, buffer, midi);
+
+    for (auto* fx : effects)
+        fx->setPlayHead (nullptr);
 }
 
 juce::AudioProcessorEditor* ChainProcessor::createEditor()
@@ -183,6 +278,8 @@ void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("ultratap", ultraTapState.toBase64Encoding(), nullptr);
     state.setProperty ("reverb", reverbState.toBase64Encoding(), nullptr);
 
+    state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
+
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -216,6 +313,10 @@ void ChainProcessor::setStateInformation (const void* data, int sizeInBytes)
     restore ("banddelay", bandDelay);   // absent des anciennes sessions : réglages d'usine
     restore ("reverb", reverb);   // absent des anciennes sessions : réglages d'usine
     restore ("ultratap", ultraTap);   // absent des anciennes sessions : réglages d'usine
+
+    // Absent des anciennes sessions : tout en série, dans l'ordre d'origine
+    // (sans prévenir l'hôte : charger une session ne la modifie pas)
+    routing.store (ChainRouting::Routing::fromString (state.getProperty ("routing").toString().toStdString()).pack());
 }
 
 // Point d'entrée appelé par Logic pour créer le plugin

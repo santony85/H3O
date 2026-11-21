@@ -3,8 +3,17 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainProcessor.h"
 
-// Un pédalier : une rangée de pédales dans l'ordre du signal (Filter > Amp > Harmonizer > Reverse > Layered Shift > Chorus > Delay > Band Delay > Ultra-Tap > Reverb),
-// chacune avec son interrupteur. Un clic sur le nom d'une pédale affiche ses réglages en dessous.
+// Un pédalier dessiné comme un schéma du signal :
+//
+//            ┌─ A : pédales… ─┐
+//   pédales ─┤                ├─ pédales
+//            └─ B : pédales… ─┘
+//
+// - un clic sur le nom d'une pédale affiche ses réglages en dessous ;
+// - on glisse une pédale pour changer sa place : dans la série, ou dans une des branches A / B ;
+// - clic droit sur une pédale : menu pour la ranger ou la décaler ;
+// - le menu Routing propose des routages tout prêts ;
+// - Balance, Spread et Cross Feedback règlent le mélange des deux branches.
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer
 {
@@ -13,33 +22,66 @@ public:
     ~ChainEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
+
+    // Reçus des boutons des pédales (glisser-déposer, clic droit)
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
 
 private:
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
 
     struct Pedal
     {
         juce::String name;
         juce::Colour colour;
         std::unique_ptr<juce::AudioProcessorEditor> editor;   // l'interface de l'effet, réutilisée telle quelle
-        std::unique_ptr<juce::TextButton> selectButton;       // affiche ses réglages
+        std::unique_ptr<juce::TextButton> selectButton;       // affiche ses réglages ; se glisse pour changer de place
         std::unique_ptr<juce::ToggleButton> onButton;         // allume / coupe l'effet
         std::unique_ptr<ButtonAttachment> onAttachment;
-        std::function<bool()> isOn;
+        juce::Rectangle<int> cell;                            // sa place dans le schéma
     };
 
-    void addPedal (const juce::String& name, juce::Colour, juce::AudioProcessor& effect,
-                   const juce::String& onParamId, std::function<bool()> isOn);
+    struct BranchControl
+    {
+        juce::Label label;
+        juce::Slider slider;
+        std::unique_ptr<SliderAttachment> attachment;
+    };
+
+    // Endroit où lâcher une pédale : une section et une place dans cette section
+    struct Drop
+    {
+        int lane = ChainRouting::pre, index = 0;
+    };
+
+    void addPedal (const juce::String& name, juce::Colour);
+    void setupBranchControl (BranchControl&, const juce::String& paramId, const juce::String& name, const juce::String& tooltip);
     void select (int index);
 
-    // Assombrit les réglages des effets coupés
+    void applyRouting (const ChainRouting::Routing&);
+    void layoutDiagram();
+    void showRoutingMenu();
+    void showPedalMenu (int effect);
+    juce::String routingName() const;
+
+    int pedalForComponent (const juce::Component*) const;
+    Drop findDrop (juce::Point<int>) const;
+    float markerX (const Drop&) const;
+    int rowY (int lane) const;   // centre vertical de la rangée d'une section
+
+    // Assombrit les réglages des effets coupés, suit les changements de routage (session rechargée)
     void timerCallback() override;
 
     ChainProcessor& chain;
     InputMode::Box inputBox { chain.parameters, juce::Colours::white };
+    juce::TextButton routingButton;
+    juce::TooltipWindow tooltips { this, 600 };
 
-    // Police un peu plus petite pour les noms des pédales : 7 pédales tiennent sur 600 pixels
+    // Police un peu plus petite pour les noms des pédales
     struct PedalLook : juce::LookAndFeel_V4
     {
         juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override
@@ -49,13 +91,32 @@ private:
     };
     PedalLook pedalLook;   // déclaré avant les pédales : détruit après leurs boutons
 
-    std::vector<Pedal> pedals;
+    std::vector<Pedal> pedals;   // indexé par ChainRouting::Effect
+    BranchControl balance, spread, crossFeedback;
     int selected = 0;
 
-    static constexpr int headerHeight = 40;   // titre + Input
-    static constexpr int stripHeight  = 64;   // la rangée de pédales
-    static constexpr int arrowWidth   = 14;
-    static constexpr int minPedalWidth = 70;  // de quoi lire « Harmonizer »
+    // Schéma : routage affiché, séparation et fusion des branches, cases des branches vides
+    ChainRouting::Routing shown = ChainRouting::Routing::series();
+    juce::Rectangle<int> diagram, emptyA, emptyB;
+    int splitX = 0, mergeX = 0;
+
+    // Glisser-déposer
+    int dragging = -1;
+    juce::Point<int> dragPos;
+    Drop drop;
+
+    static constexpr int headerHeight   = 40;   // titre, Routing, Input
+    static constexpr int nameHeight     = 24;
+    static constexpr int cellHeight     = 44;   // nom + interrupteur
+    static constexpr int rowGap         = 8;
+    static constexpr int diagramHeight  = 3 * cellHeight + 2 * rowGap + 16;
+    static constexpr int controlsHeight = 30;   // Balance, Spread, Cross Feedback
+    static constexpr int stripHeight    = diagramHeight + controlsHeight + 6;
+    static constexpr int arrowWidth     = 12;
+    static constexpr int splitWidth     = 22;   // place des embranchements
+    static constexpr int minPedalWidth  = 68;   // de quoi lire « Harmonizer »
+    static constexpr int maxPedalWidth  = 96;
+    static constexpr int diagramMargin  = 12;   // marge à gauche et à droite, dans le schéma
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainEditor)
 };

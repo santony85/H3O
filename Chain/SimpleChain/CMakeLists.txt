@@ -16,6 +16,7 @@ juce_add_plugin(SimpleChain
     COPY_PLUGIN_AFTER_BUILD TRUE)
 
 audiofx_setup_plugin(SimpleChain
+    ${CMAKE_CURRENT_SOURCE_DIR}/ChainRouting.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainProcessor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainEditor.h

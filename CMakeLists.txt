@@ -275,6 +275,19 @@ audiofx_link_nam(EditorSnapshot)
 target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 
 #==============================================================================
+# Tests du routage de Simple Chain (ordre, branches A / B, sessions) : cible ChainTest
+#==============================================================================
+juce_add_console_app(ChainTest PRODUCT_NAME "ChainTest")
+target_sources(ChainTest PRIVATE Tests/ChainTest.cpp
+    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
+    ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES})
+target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
+target_compile_definitions(ChainTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
+audiofx_link_nam(ChainTest)
+target_link_libraries(ChainTest PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+
+#==============================================================================
 # Mesures du moteur de réverbération, sans JUCE : cible ReverbTest
 #==============================================================================
 add_executable(ReverbTest Tests/ReverbTest.cpp)
