@@ -6,6 +6,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addAndMakeVisible (inputBox);
 
     // Même ordre que le signal, mêmes couleurs que les interfaces des effets
+    addPedal ("Filter",     juce::Colour (0xff90d040), chain.filter,     "filteron",     [this] { return chain.isFilterOn(); });
     addPedal ("Amp",        juce::Colour (0xffe06040), chain.amp,        "ampon",        [this] { return chain.isAmpOn(); });
     addPedal ("Harmonizer", juce::Colour (0xff40b0e0), chain.harmonizer, "harmonizeron", [this] { return chain.isHarmonizerOn(); });
     addPedal ("Reverse",    juce::Colour (0xff50c878), chain.reverse,    "reverseon",    [this] { return chain.isReverseOn(); });

@@ -5,6 +5,7 @@
 #include "UltraTap/UltraTapEditor.h"
 #include "Reverb/ReverbEditor.h"
 #include "LayeredShift/LayeredShiftEditor.h"
+#include "SweptFilter/SweptFilterEditor.h"
 
 #include <cstdio>
 
@@ -42,6 +43,12 @@ int main (int argc, char** argv)
         LayeredShiftProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("LayeredShift.png"));
+    }
+
+    {
+        SweptFilterProcessor fx;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("SweptFilter.png"));
     }
 
     {

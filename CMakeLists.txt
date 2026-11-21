@@ -139,6 +139,14 @@ set(LAYEREDSHIFT_SOURCES
     ${EFFECTS_DIR}/LayeredShift/LayeredShiftEditor.h
     ${EFFECTS_DIR}/LayeredShift/LayeredShiftEditor.cpp)
 
+set(SWEPTFILTER_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/SweptFilter/SweptFilterEngine.h
+    ${EFFECTS_DIR}/SweptFilter/SweptFilterProcessor.h
+    ${EFFECTS_DIR}/SweptFilter/SweptFilterProcessor.cpp
+    ${EFFECTS_DIR}/SweptFilter/SweptFilterEditor.h
+    ${EFFECTS_DIR}/SweptFilter/SweptFilterEditor.cpp)
+
 # Réglages communs à tous les plugins : sources, dossier "Source" dans Xcode, modules JUCE
 function(audiofx_setup_plugin target)
     set(sources ${ARGN})
@@ -175,6 +183,7 @@ add_subdirectory(Plugins/SimpleUltraTap)
 add_subdirectory(Plugins/SimpleBandDelay)
 add_subdirectory(Plugins/SimpleReverb)
 add_subdirectory(Plugins/SimpleLayeredShift)
+add_subdirectory(Plugins/SimpleSweptFilter)
 add_subdirectory(Chain/SimpleChain)
 
 #==============================================================================
@@ -259,7 +268,7 @@ juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
     Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
@@ -278,3 +287,10 @@ target_compile_features(ReverbTest PRIVATE cxx_std_17)
 add_executable(LayeredShiftTest Tests/LayeredShiftTest.cpp)
 target_include_directories(LayeredShiftTest PRIVATE ${EFFECTS_DIR})
 target_compile_features(LayeredShiftTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du moteur Swept Filter, sans JUCE : cible SweptFilterTest
+#==============================================================================
+add_executable(SweptFilterTest Tests/SweptFilterTest.cpp)
+target_include_directories(SweptFilterTest PRIVATE ${EFFECTS_DIR}/SweptFilter)
+target_compile_features(SweptFilterTest PRIVATE cxx_std_17)

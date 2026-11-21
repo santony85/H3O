@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "SweptFilter/SweptFilterProcessor.h"
 #include "Amp/AmpProcessor.h"
 #include "Harmonizer/HarmonizerProcessor.h"
 #include "Reverse/ReverseProcessor.h"
@@ -47,6 +48,7 @@ public:
     InputMode::Selector input;
 
     // Les effets, dans l'ordre du signal
+    SweptFilterProcessor filter;
     AmpProcessor amp;
     HarmonizerProcessor harmonizer;
     ReverseProcessor reverse;
@@ -57,6 +59,7 @@ public:
     UltraTapProcessor ultraTap;
     ReverbProcessor reverb;
 
+    bool isFilterOn() const noexcept     { return filterOn->load() >= 0.5f; }
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
     bool isHarmonizerOn() const noexcept { return harmonizerOn->load() >= 0.5f; }
     bool isLayeredOn() const noexcept    { return layeredOn->load() >= 0.5f; }
@@ -70,6 +73,7 @@ public:
 private:
     std::atomic<float>* harmonizerOn = nullptr;
     std::atomic<float>* ampOn = nullptr;
+    std::atomic<float>* filterOn = nullptr;
     std::atomic<float>* reverseOn = nullptr;
     std::atomic<float>* layeredOn = nullptr;
     std::atomic<float>* chorusOn = nullptr;
