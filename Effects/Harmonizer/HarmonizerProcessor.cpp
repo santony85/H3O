@@ -87,21 +87,21 @@ HarmonizerProcessor::HarmonizerProcessor()
 
     for (int v = 0; v < 2; ++v)
     {
-        voiceParams[v].semitones = parameters.getRawParameterValue (voiceId (v, "semi"));
-        voiceParams[v].cents     = parameters.getRawParameterValue (voiceId (v, "cents"));
-        voiceParams[v].delayMs   = parameters.getRawParameterValue (voiceId (v, "delay"));
-        voiceParams[v].level     = parameters.getRawParameterValue (voiceId (v, "level"));
-        voiceParams[v].degrees   = parameters.getRawParameterValue (voiceId (v, "degrees"));
+        voiceParams[v].semitones = modulation.get (parameters, voiceId (v, "semi"));
+        voiceParams[v].cents     = modulation.get (parameters, voiceId (v, "cents"));
+        voiceParams[v].delayMs   = modulation.get (parameters, voiceId (v, "delay"));
+        voiceParams[v].level     = modulation.get (parameters, voiceId (v, "level"));
+        voiceParams[v].degrees   = modulation.get (parameters, voiceId (v, "degrees"));
     }
 
-    modeParam  = parameters.getRawParameterValue ("mode");
-    keyParam   = parameters.getRawParameterValue ("key");
-    scaleParam = parameters.getRawParameterValue ("scale");
+    modeParam  = modulation.get (parameters, "mode");
+    keyParam   = modulation.get (parameters, "key");
+    scaleParam = modulation.get (parameters, "scale");
 
-    spliceParam   = parameters.getRawParameterValue ("splice");
-    feedbackParam = parameters.getRawParameterValue ("feedback");
-    spreadParam   = parameters.getRawParameterValue ("spread");
-    mixParam      = parameters.getRawParameterValue ("mix");
+    spliceParam   = modulation.get (parameters, "splice");
+    feedbackParam = modulation.get (parameters, "feedback");
+    spreadParam   = modulation.get (parameters, "spread");
+    mixParam      = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout HarmonizerProcessor::createParameterLayout()
@@ -227,6 +227,7 @@ bool HarmonizerProcessor::isBusesLayoutSupported (const BusesLayout& layouts) co
 
 void HarmonizerProcessor::prepareToPlay (double sampleRate, int)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     shifter.prepare (sampleRate, maxVoiceDelaySeconds, maxSpliceSeconds);
@@ -264,6 +265,7 @@ void HarmonizerProcessor::prepareToPlay (double sampleRate, int)
 
 void HarmonizerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

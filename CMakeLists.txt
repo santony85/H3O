@@ -63,7 +63,8 @@ endfunction()
 set(EFFECTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Effects)
 
 set(COMMON_SOURCES
-    ${EFFECTS_DIR}/Common/InputMode.h)
+    ${EFFECTS_DIR}/Common/InputMode.h
+    ${EFFECTS_DIR}/Common/ModTargets.h)
 
 set(DELAY_SOURCES
     ${COMMON_SOURCES}
@@ -266,7 +267,7 @@ target_compile_features(BandDelayTest PRIVATE cxx_std_17)
 #==============================================================================
 juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
-    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
+    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
     ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
@@ -279,7 +280,7 @@ target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_d
 #==============================================================================
 juce_add_console_app(ChainTest PRODUCT_NAME "ChainTest")
 target_sources(ChainTest PRIVATE Tests/ChainTest.cpp
-    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp
+    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
     ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES})
 target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)

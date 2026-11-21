@@ -31,13 +31,13 @@ ReverseProcessor::ReverseProcessor()
 {
     input.attach (parameters);
 
-    lengthParam   = parameters.getRawParameterValue ("length");
-    shiftParam    = parameters.getRawParameterValue ("shift");
-    fineParam     = parameters.getRawParameterValue ("fine");
-    feedbackParam = parameters.getRawParameterValue ("feedback");
-    spreadParam   = parameters.getRawParameterValue ("spread");
-    toneParam     = parameters.getRawParameterValue ("tone");
-    mixParam      = parameters.getRawParameterValue ("mix");
+    lengthParam   = modulation.get (parameters, "length");
+    shiftParam    = modulation.get (parameters, "shift");
+    fineParam     = modulation.get (parameters, "fine");
+    feedbackParam = modulation.get (parameters, "feedback");
+    spreadParam   = modulation.get (parameters, "spread");
+    toneParam     = modulation.get (parameters, "tone");
+    mixParam      = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ReverseProcessor::createParameterLayout()
@@ -126,6 +126,7 @@ bool ReverseProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ReverseProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     for (int c = 0; c < 2; ++c)
@@ -152,6 +153,7 @@ void ReverseProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void ReverseProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

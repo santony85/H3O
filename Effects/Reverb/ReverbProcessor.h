@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "ReverbEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Réverbération stéréo façon H3000 : Room, Hall et Plate,
 // avec pre-delay, taille, durée, amortissement des aigus et filtres de sortie.
@@ -41,6 +42,7 @@ public:
     ReverbEngine::Settings currentSettings() const noexcept;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
 private:

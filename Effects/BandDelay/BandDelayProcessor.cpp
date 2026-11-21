@@ -32,15 +32,15 @@ BandDelayProcessor::BandDelayProcessor()
 {
     input.attach (parameters);
 
-    bandsParam     = parameters.getRawParameterValue ("bands");
-    timeParam      = parameters.getRawParameterValue ("time");
-    lowParam       = parameters.getRawParameterValue ("low");
-    highParam      = parameters.getRawParameterValue ("high");
-    resonanceParam = parameters.getRawParameterValue ("resonance");
-    patternParam   = parameters.getRawParameterValue ("pattern");
-    spreadParam    = parameters.getRawParameterValue ("spread");
-    feedbackParam  = parameters.getRawParameterValue ("feedback");
-    mixParam       = parameters.getRawParameterValue ("mix");
+    bandsParam     = modulation.get (parameters, "bands");
+    timeParam      = modulation.get (parameters, "time");
+    lowParam       = modulation.get (parameters, "low");
+    highParam      = modulation.get (parameters, "high");
+    resonanceParam = modulation.get (parameters, "resonance");
+    patternParam   = modulation.get (parameters, "pattern");
+    spreadParam    = modulation.get (parameters, "spread");
+    feedbackParam  = modulation.get (parameters, "feedback");
+    mixParam       = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout BandDelayProcessor::createParameterLayout()
@@ -145,6 +145,7 @@ bool BandDelayProcessor::isBusesLayoutSupported (const BusesLayout& layouts) con
 
 void BandDelayProcessor::prepareToPlay (double sampleRate, int)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate, maxTimeMs * 0.001 + 0.05);
@@ -158,6 +159,7 @@ void BandDelayProcessor::prepareToPlay (double sampleRate, int)
 
 void BandDelayProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

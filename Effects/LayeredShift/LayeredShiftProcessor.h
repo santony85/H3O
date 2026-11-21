@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "LayeredShiftEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Layered Shift façon H3000 : deux couches transposées, doublées gauche / droite et
 // désaccordées, avec un lent balayage de hauteur, pour des nappes et des cascades.
@@ -38,6 +39,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
 private:

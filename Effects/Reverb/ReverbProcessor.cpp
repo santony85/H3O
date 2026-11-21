@@ -33,17 +33,17 @@ ReverbProcessor::ReverbProcessor()
 {
     input.attach (parameters);
 
-    typeParam       = parameters.getRawParameterValue ("type");
-    preDelayParam   = parameters.getRawParameterValue ("predelay");
-    sizeParam       = parameters.getRawParameterValue ("size");
-    decayParam      = parameters.getRawParameterValue ("decay");
-    dampingParam    = parameters.getRawParameterValue ("damping");
-    diffusionParam  = parameters.getRawParameterValue ("diffusion");
-    modulationParam = parameters.getRawParameterValue ("modulation");
-    lowCutParam     = parameters.getRawParameterValue ("lowcut");
-    highCutParam    = parameters.getRawParameterValue ("highcut");
-    widthParam      = parameters.getRawParameterValue ("width");
-    mixParam        = parameters.getRawParameterValue ("mix");
+    typeParam       = modulation.get (parameters, "type");
+    preDelayParam   = modulation.get (parameters, "predelay");
+    sizeParam       = modulation.get (parameters, "size");
+    decayParam      = modulation.get (parameters, "decay");
+    dampingParam    = modulation.get (parameters, "damping");
+    diffusionParam  = modulation.get (parameters, "diffusion");
+    modulationParam = modulation.get (parameters, "modulation");
+    lowCutParam     = modulation.get (parameters, "lowcut");
+    highCutParam    = modulation.get (parameters, "highcut");
+    widthParam      = modulation.get (parameters, "width");
+    mixParam        = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ReverbProcessor::createParameterLayout()
@@ -139,6 +139,7 @@ bool ReverbProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ReverbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate);
@@ -161,6 +162,7 @@ void ReverbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

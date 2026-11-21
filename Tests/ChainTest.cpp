@@ -313,6 +313,148 @@ namespace
         }
     }
 
+    void modulationSources()
+    {
+        std::printf ("\n--- Sources de modulation ---\n");
+        ModulationSources src;
+        src.prepare (rate);
+
+        ModulationSources::Settings settings;
+        settings.lfoRate[0] = 1.0f;
+        settings.lfoShape[0] = ModulationSources::sine;
+        settings.lfoRate[1] = 1.0f;
+        settings.lfoShape[1] = ModulationSources::square;
+        src.setSettings (settings);
+
+        // 220 Hz à −6 dB pendant 0,25 s : quart de période du LFO à 1 Hz
+        std::vector<float> note ((size_t) (rate * 0.25));
+        for (size_t i = 0; i < note.size(); ++i)
+            note[i] = 0.5f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * (double) i / rate);
+
+        for (size_t i = 0; i < note.size(); i += 64)
+            src.process (note.data() + i, (int) std::min<size_t> (64, note.size() - i));
+
+        std::printf ("        LFO 1 %.3f, LFO 2 %.3f, Envelope %.3f, Pitch %.3f (attendu %.3f)\n",
+                     src.get (ModulationSources::lfo1), src.get (ModulationSources::lfo2),
+                     src.get (ModulationSources::envelope), src.get (ModulationSources::pitch), (57.0f - 40.0f) / 48.0f);
+        check (std::abs (src.get (ModulationSources::lfo1) - 1.0f) < 0.01f, "LFO sinus à 1 Hz : sommet au quart de période");
+        check (src.get (ModulationSources::lfo2) == 1.0f, "LFO carré : +1 sur la première moitié");
+        check (std::abs (src.get (ModulationSources::envelope) - (48.0f - 6.0f) / 48.0f) < 0.03f, "Envelope : −6 dB → 0,875");
+        check (std::abs (src.get (ModulationSources::pitch) - (57.0f - 40.0f) / 48.0f) < 0.01f, "Pitch : la note jouée (A3)");
+
+        // Silence : l'enveloppe retombe, la note est gardée
+        std::vector<float> silence ((size_t) rate, 0.0f);
+        for (size_t i = 0; i < silence.size(); i += 64)
+            src.process (silence.data() + i, 64);
+        check (src.get (ModulationSources::envelope) < 0.01f, "Envelope : retombe à 0 dans le silence");
+        check (std::abs (src.get (ModulationSources::pitch) - (57.0f - 40.0f) / 48.0f) < 0.01f, "Pitch : garde la dernière note");
+
+        // Random : reste entre −1 et +1, et bouge
+        float lo = 1.0f, hi = -1.0f;
+        for (int i = 0; i < 2000; ++i)
+        {
+            src.process (silence.data(), 64);
+            lo = std::min (lo, src.get (ModulationSources::random));
+            hi = std::max (hi, src.get (ModulationSources::random));
+        }
+        std::printf ("        Random entre %.2f et %.2f\n", lo, hi);
+        check (lo >= -1.0f && hi <= 1.0f && hi - lo > 0.8f, "Random : bouge, entre −1 et +1");
+    }
+
+    void modulationMatrix()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Matrice de modulation ---\n");
+        const auto dry = input();
+
+        {
+            ChainProcessor chain;
+            check (chain.findDestination ("delay/time") >= 0 && chain.findDestination ("reverb/decay") >= 0
+                   && chain.findDestination ("branches/branchspread") >= 0,
+                   "destinations : réglages des effets et des branches");
+            check (chain.findDestination ("delay/sync") < 0 && chain.findDestination ("reverb/type") < 0
+                   && chain.findDestination ("harmonizer/asemi") < 0,
+                   "pas de menus, d'interrupteurs ni de réglages par crans");
+            std::printf ("        %d destinations\n", (int) chain.getDestinations().size());
+        }
+
+        // LFO carré (+1 au début) → Mix du Delay −100 % : le delay ne laisse passer que le son sec
+        {
+            ChainProcessor chain;
+            onlyOn (chain, { delay });
+            setParam (chain, "lfo1rate", 0.02f);
+            setParam (chain, "lfo1shape", (float) ModulationSources::square);
+            setParam (chain, "mod1source", (float) ModulationSources::lfo1);
+            setParam (chain, "mod1amount", -100.0f);
+            chain.setSlotDestination (0, chain.findDestination ("delay/mix"));
+
+            const float baseMix = chain.delay.parameters.getRawParameterValue ("mix")->load();
+            const auto got = run (chain);
+
+            float error = 0.0f;
+            for (int ch = 0; ch < 2; ++ch)
+                for (size_t i = (size_t) (0.2 * rate); i < dry[0].size(); ++i)
+                    error = std::max (error, std::abs (got[(size_t) ch][i] - dry[(size_t) ch][i]));
+
+            std::printf ("        écart avec le son sec %.2e (Mix réglé à %.0f %%)\n", error, baseMix);
+            check (error < 1.0e-4f, "LFO 1 → Delay Mix −100 % : le delay est coupé");
+            check (chain.delay.parameters.getRawParameterValue ("mix")->load() == baseMix, "le réglage du Mix n'est pas touché");
+
+            juce::MemoryBlock state;
+            chain.delay.getStateInformation (state);
+            DelayProcessor copy;
+            copy.setStateInformation (state.getData(), (int) state.getSize());
+            check (copy.parameters.getRawParameterValue ("mix")->load() == baseMix, "la session garde le réglage, pas la valeur modulée");
+
+            // La ligne enlevée : le delay revient
+            chain.setSlotDestination (0, -1);
+            const auto after = run (chain);
+            check (maxDifference (after, dry) > 1.0e-2f, "ligne enlevée : le réglage d'origine revient");
+        }
+
+        // LFO carré → Spread des branches +100 % : A (sec) à gauche
+        {
+            ChainProcessor chain;
+            onlyOn (chain, { delay });
+            auto r = Routing::series();
+            r.move (delay, branchB, 0);
+            chain.setRouting (r);
+            setParam (chain, "lfo1rate", 0.02f);
+            setParam (chain, "lfo1shape", (float) ModulationSources::square);
+            setParam (chain, "mod1source", (float) ModulationSources::lfo1);
+            setParam (chain, "mod1amount", 100.0f);
+            chain.setSlotDestination (0, chain.findDestination ("branches/branchspread"));
+
+            const auto got = run (chain);
+            float error = 0.0f;
+            for (size_t i = (size_t) (0.2 * rate); i < dry[0].size(); ++i)
+                error = std::max (error, std::abs (got[0][i] - dry[0][i]));
+            check (error < 1.0e-4f, "LFO 1 → Spread +100 % : branche A seule à gauche");
+        }
+
+        // Sessions : destinations enregistrées par leur nom
+        {
+            ChainProcessor chain;
+            setParam (chain, "mod3source", (float) ModulationSources::envelope);
+            chain.setSlotDestination (2, chain.findDestination ("reverb/size"));
+
+            juce::MemoryBlock state;
+            chain.getStateInformation (state);
+            ChainProcessor restored;
+            restored.setStateInformation (state.getData(), (int) state.getSize());
+            check (restored.getSlotDestination (2) == chain.findDestination ("reverb/size") && restored.isSlotActive (2),
+                   "ligne 3 (Envelope → Reverb Size) enregistrée puis relue");
+
+            auto xml = juce::AudioProcessor::getXmlFromBinary (state.getData(), (int) state.getSize());
+            xml->removeAttribute ("mod3dest");
+            juce::MemoryBlock oldState;
+            juce::AudioProcessor::copyXmlToBinary (*xml, oldState);
+            ChainProcessor old;
+            old.setStateInformation (oldState.getData(), (int) oldState.getSize());
+            check (old.getSlotDestination (2) < 0, "ancienne session : aucune modulation");
+        }
+    }
+
     void sessions()
     {
         using namespace ChainRouting;
@@ -352,6 +494,8 @@ int main()
     seriesOrder();
     parallel();
     sessions();
+    modulationSources();
+    modulationMatrix();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");
     return failures == 0 ? 0 : 1;

@@ -33,19 +33,19 @@ SweptFilterProcessor::SweptFilterProcessor()
 {
     input.attach (parameters);
 
-    sourceParam      = parameters.getRawParameterValue ("source");
-    typeParam        = parameters.getRawParameterValue ("type");
-    shapeParam       = parameters.getRawParameterValue ("shape");
-    lowParam         = parameters.getRawParameterValue ("low");
-    highParam        = parameters.getRawParameterValue ("high");
-    resonanceParam   = parameters.getRawParameterValue ("resonance");
-    rateParam        = parameters.getRawParameterValue ("rate");
-    phaseParam       = parameters.getRawParameterValue ("phase");
-    sensitivityParam = parameters.getRawParameterValue ("sensitivity");
-    attackParam      = parameters.getRawParameterValue ("attack");
-    releaseParam     = parameters.getRawParameterValue ("release");
-    directionParam   = parameters.getRawParameterValue ("direction");
-    mixParam         = parameters.getRawParameterValue ("mix");
+    sourceParam      = modulation.get (parameters, "source");
+    typeParam        = modulation.get (parameters, "type");
+    shapeParam       = modulation.get (parameters, "shape");
+    lowParam         = modulation.get (parameters, "low");
+    highParam        = modulation.get (parameters, "high");
+    resonanceParam   = modulation.get (parameters, "resonance");
+    rateParam        = modulation.get (parameters, "rate");
+    phaseParam       = modulation.get (parameters, "phase");
+    sensitivityParam = modulation.get (parameters, "sensitivity");
+    attackParam      = modulation.get (parameters, "attack");
+    releaseParam     = modulation.get (parameters, "release");
+    directionParam   = modulation.get (parameters, "direction");
+    mixParam         = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout SweptFilterProcessor::createParameterLayout()
@@ -157,6 +157,7 @@ bool SweptFilterProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
 
 void SweptFilterProcessor::prepareToPlay (double sampleRate, int)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     engine.prepare (sampleRate);
     engine.setSettings (currentSettings());
 
@@ -166,6 +167,7 @@ void SweptFilterProcessor::prepareToPlay (double sampleRate, int)
 
 void SweptFilterProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

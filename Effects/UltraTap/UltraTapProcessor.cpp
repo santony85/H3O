@@ -31,15 +31,15 @@ UltraTapProcessor::UltraTapProcessor()
 {
     input.attach (parameters);
 
-    preDelayParam = parameters.getRawParameterValue ("predelay");
-    lengthParam   = parameters.getRawParameterValue ("length");
-    tapsParam     = parameters.getRawParameterValue ("taps");
-    slopeParam    = parameters.getRawParameterValue ("slope");
-    taperParam    = parameters.getRawParameterValue ("taper");
-    spreadParam   = parameters.getRawParameterValue ("spread");
-    feedbackParam = parameters.getRawParameterValue ("feedback");
-    toneParam     = parameters.getRawParameterValue ("tone");
-    mixParam      = parameters.getRawParameterValue ("mix");
+    preDelayParam = modulation.get (parameters, "predelay");
+    lengthParam   = modulation.get (parameters, "length");
+    tapsParam     = modulation.get (parameters, "taps");
+    slopeParam    = modulation.get (parameters, "slope");
+    taperParam    = modulation.get (parameters, "taper");
+    spreadParam   = modulation.get (parameters, "spread");
+    feedbackParam = modulation.get (parameters, "feedback");
+    toneParam     = modulation.get (parameters, "tone");
+    mixParam      = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout UltraTapProcessor::createParameterLayout()
@@ -145,6 +145,7 @@ bool UltraTapProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
 
 void UltraTapProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate, (maxPreDelayMs + maxLengthMs) * 0.001 + 0.05);
@@ -163,6 +164,7 @@ void UltraTapProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void UltraTapProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

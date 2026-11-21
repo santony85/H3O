@@ -73,14 +73,14 @@ DelayProcessor::DelayProcessor()
 {
     input.attach (parameters);
 
-    timeParam     = parameters.getRawParameterValue ("time");
-    feedbackParam = parameters.getRawParameterValue ("feedback");
-    mixParam      = parameters.getRawParameterValue ("mix");
-    syncParam     = parameters.getRawParameterValue ("sync");
-    divisionParam = parameters.getRawParameterValue ("division");
-    lowCutParam   = parameters.getRawParameterValue ("lowcut");
-    highCutParam  = parameters.getRawParameterValue ("highcut");
-    pingPongParam = parameters.getRawParameterValue ("pingpong");
+    timeParam     = modulation.get (parameters, "time");
+    feedbackParam = modulation.get (parameters, "feedback");
+    mixParam      = modulation.get (parameters, "mix");
+    syncParam     = modulation.get (parameters, "sync");
+    divisionParam = modulation.get (parameters, "division");
+    lowCutParam   = modulation.get (parameters, "lowcut");
+    highCutParam  = modulation.get (parameters, "highcut");
+    pingPongParam = modulation.get (parameters, "pingpong");
 
     jassert (divisionNames.size() == (int) std::size (divisionBeats));
 }
@@ -173,6 +173,7 @@ bool DelayProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void DelayProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock,
@@ -200,6 +201,7 @@ void DelayProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numSamples  = buffer.getNumSamples();

@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 #include "RateConverter.h"
 
 namespace nam { class DSP; }
@@ -41,6 +42,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     // Chargement des fichiers (hors du fil audio). Renvoie un message d'erreur, vide si tout va bien.

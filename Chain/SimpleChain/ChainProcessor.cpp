@@ -1,35 +1,92 @@
 #include "ChainProcessor.h"
 #include "ChainEditor.h"
 
+namespace
+{
+    juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
+    {
+        juce::AudioProcessorValueTreeState::ParameterLayout layout;
+        layout.add (
+            InputMode::createParameter(),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "harmonizeron", 1 }, "Harmonizer On", true),
+            // Amp, Reverse et Chorus coupés par défaut : tes réglages et sessions existants sonnent comme avant
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ampon", 1 }, "Amp On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "filteron", 1 }, "Filter On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverseon", 1 }, "Reverse On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "layeredon", 1 }, "Layered Shift On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "choruson", 1 }, "Chorus On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "delayon", 1 }, "Delay On", true),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "banddelayon", 1 }, "Band Delay On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ultratapon", 1 }, "Ultra-Tap On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverbon", 1 }, "Reverb On", false),
+            // Branches parallèles A et B
+            std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchbalance", 1 }, "Branch Balance",
+                                                         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f,
+                                                         juce::AudioParameterFloatAttributes().withLabel ("%")),
+            std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchspread", 1 }, "Branch Spread",
+                                                         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f,
+                                                         juce::AudioParameterFloatAttributes().withLabel ("%")),
+            std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "crossfeedback", 1 }, "Cross Feedback",
+                                                         juce::NormalisableRange<float> (0.0f, 90.0f, 0.1f), 0.0f,
+                                                         juce::AudioParameterFloatAttributes().withLabel ("%")));
+
+        // Sources de modulation
+        auto rateRange = [] (float lo, float hi, float centre)
+        {
+            juce::NormalisableRange<float> r (lo, hi, 0.01f);
+            r.setSkewForCentre (centre);
+            return r;
+        };
+
+        juce::StringArray shapes;
+        for (int i = 0; i < ModulationSources::numShapes; ++i)
+            shapes.add (ModulationSources::shapeName (i));
+
+        for (int l = 0; l < 2; ++l)
+        {
+            const juce::String n (l + 1);
+            layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "lfo" + n + "rate", 1 }, "LFO " + n + " Rate",
+                                                                     rateRange (0.02f, 20.0f, 1.0f), l == 0 ? 0.5f : 3.0f,
+                                                                     juce::AudioParameterFloatAttributes().withLabel ("Hz")));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "lfo" + n + "shape", 1 }, "LFO " + n + " Shape",
+                                                                      shapes, l == 0 ? ModulationSources::sine : ModulationSources::triangle));
+        }
+
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "randomrate", 1 }, "Random Rate",
+                                                                 rateRange (0.1f, 20.0f, 2.0f), 2.0f,
+                                                                 juce::AudioParameterFloatAttributes().withLabel ("Hz")));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "envattack", 1 }, "Envelope Attack",
+                                                                 rateRange (1.0f, 200.0f, 20.0f), 10.0f,
+                                                                 juce::AudioParameterFloatAttributes().withLabel ("ms")));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "envrelease", 1 }, "Envelope Release",
+                                                                 rateRange (20.0f, 2000.0f, 250.0f), 250.0f,
+                                                                 juce::AudioParameterFloatAttributes().withLabel ("ms")));
+
+        // Les lignes de la matrice : source et quantité (la destination est enregistrée à part, par son nom)
+        juce::StringArray sourceNames;
+        for (int i = 0; i < ModulationSources::numSources; ++i)
+            sourceNames.add (ModulationSources::sourceName (i));
+
+        for (int slot = 0; slot < ChainProcessor::numSlots; ++slot)
+        {
+            const juce::String n (slot + 1);
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { ChainProcessor::slotParamId (slot, "source"), 1 },
+                                                                      "Mod " + n + " Source", sourceNames, 0));
+            layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ChainProcessor::slotParamId (slot, "amount"), 1 },
+                                                                     "Mod " + n + " Amount",
+                                                                     juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f,
+                                                                     juce::AudioParameterFloatAttributes().withLabel ("%")));
+        }
+
+        return layout;
+    }
+}
+
 ChainProcessor::ChainProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this, nullptr, "CHAIN_PARAMETERS",
-                  {
-                      InputMode::createParameter(),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "harmonizeron", 1 }, "Harmonizer On", true),
-                      // Amp, Reverse et Chorus coupés par défaut : tes réglages et sessions existants sonnent comme avant
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ampon", 1 }, "Amp On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "filteron", 1 }, "Filter On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverseon", 1 }, "Reverse On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "layeredon", 1 }, "Layered Shift On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "choruson", 1 }, "Chorus On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "delayon", 1 }, "Delay On", true),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "banddelayon", 1 }, "Band Delay On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "ultratapon", 1 }, "Ultra-Tap On", false),
-                      std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverbon", 1 }, "Reverb On", false),
-                      // Branches parallèles A et B
-                      std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchbalance", 1 }, "Branch Balance",
-                                                                   juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f,
-                                                                   juce::AudioParameterFloatAttributes().withLabel ("%")),
-                      std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchspread", 1 }, "Branch Spread",
-                                                                   juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f,
-                                                                   juce::AudioParameterFloatAttributes().withLabel ("%")),
-                      std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "crossfeedback", 1 }, "Cross Feedback",
-                                                                   juce::NormalisableRange<float> (0.0f, 90.0f, 0.1f), 0.0f,
-                                                                   juce::AudioParameterFloatAttributes().withLabel ("%")),
-                  })
+      parameters (*this, nullptr, "CHAIN_PARAMETERS", createParameterLayout())
 {
     harmonizerOn = parameters.getRawParameterValue ("harmonizeron");
     ampOn        = parameters.getRawParameterValue ("ampon");
@@ -42,13 +99,61 @@ ChainProcessor::ChainProcessor()
     ultraTapOn   = parameters.getRawParameterValue ("ultratapon");
     reverbOn     = parameters.getRawParameterValue ("reverbon");
 
-    branchBalance = parameters.getRawParameterValue ("branchbalance");
-    branchSpread  = parameters.getRawParameterValue ("branchspread");
-    crossFeedback = parameters.getRawParameterValue ("crossfeedback");
+    // Lus à travers la modulation, comme les réglages des effets
+    branchBalance = chainTargets.get (parameters, "branchbalance");
+    branchSpread  = chainTargets.get (parameters, "branchspread");
+    crossFeedback = chainTargets.get (parameters, "crossfeedback");
+
+    for (int l = 0; l < 2; ++l)
+    {
+        lfoRate[l]  = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "rate");
+        lfoShape[l] = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "shape");
+    }
+    randomRate = parameters.getRawParameterValue ("randomrate");
+    envAttack  = parameters.getRawParameterValue ("envattack");
+    envRelease = parameters.getRawParameterValue ("envrelease");
+
+    for (int slot = 0; slot < numSlots; ++slot)
+    {
+        slotSource[(size_t) slot] = parameters.getRawParameterValue (slotParamId (slot, "source"));
+        slotAmount[(size_t) slot] = parameters.getRawParameterValue (slotParamId (slot, "amount"));
+        slotDestination[(size_t) slot] = -1;
+        slotOutput[(size_t) slot] = 0.0f;
+    }
+    for (auto& v : sourceValues)
+        v = 0.0f;
 
     // Même ordre que ChainRouting::Effect
     effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb };
     onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn };
+
+    // Tout ce que la matrice peut moduler : les réglages continus de chaque effet, puis les branches
+    static const char* effectNames[] = { "Filter", "Amp", "Harmonizer", "Reverse", "Layered", "Chorus",
+                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Branches" };
+    std::array<ModTargets*, ChainRouting::numEffects + 1> targetLists {
+        &filter.modulation, &amp.modulation, &harmonizer.modulation, &reverse.modulation, &layered.modulation,
+        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &chainTargets
+    };
+
+    for (int e = 0; e <= ChainRouting::numEffects; ++e)
+    {
+        auto& list = *targetLists[(size_t) e];
+        const juce::String effectKey = e < ChainRouting::numEffects ? ChainRouting::keys()[(size_t) e] : "branches";
+
+        for (int i = 0; i < list.size(); ++i)
+        {
+            Destination d;
+            d.key        = effectKey + "/" + list.idOf (i);
+            d.effectName = effectNames[e];
+            d.paramName  = list[i].parameter->getName (40);
+            d.effect     = e;
+            d.target     = &list[i];
+            destinations.push_back (d);
+        }
+    }
+
+    modSum.assign (destinations.size(), 0.0f);
+    modApplied.assign (destinations.size(), 0.0f);
 
     // C'est la chaîne qui choisit l'entrée ; les effets reçoivent déjà de la stéréo
     input.attach (parameters);
@@ -90,6 +195,8 @@ bool ChainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    chainTargets.update();   // Balance, Spread et Cross Feedback à jour avant de régler le lissage
+
     // Les effets internes travaillent toujours en stéréo
     for (auto* fx : effects)
     {
@@ -116,6 +223,9 @@ void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         mixGains[i].reset (sampleRate, 0.03);
         mixGains[i].setCurrentAndTargetValue (start[i]);
     }
+    sources.prepare (sampleRate);
+    monoScratch.assign ((size_t) size, 0.0f);
+
     feedbackGain.reset (sampleRate, 0.03);
     feedbackGain.setCurrentAndTargetValue (crossFeedback->load() * 0.01f);
 }
@@ -158,6 +268,33 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         fx->setPlayHead (playHead);
 
     const auto r = getRouting();   // lu une seule fois : le même routage pour tout le bloc
+    const int n = buffer.getNumSamples();
+
+    // Avec une modulation en cours, le bloc est traité par paquets de 64 échantillons (~1,3 ms) :
+    // les réglages modulés bougent sans marches audibles
+    bool modulating = false;
+    for (int slot = 0; slot < numSlots; ++slot)
+        modulating = modulating || isSlotActive (slot);
+
+    const int chunk = modulating ? 64 : n;
+    const int numChannels = juce::jmin (2, buffer.getNumChannels());
+
+    for (int start = 0; start < n; start += chunk)
+    {
+        const int length = juce::jmin (chunk, n - start);
+        float* channels[2] = { buffer.getWritePointer (0, start), buffer.getWritePointer (numChannels - 1, start) };
+        juce::AudioBuffer<float> part (channels, numChannels, length);
+
+        updateModulation (part);
+        processRouting (r, part, midi);
+    }
+
+    for (auto* fx : effects)
+        fx->setPlayHead (nullptr);
+}
+
+void ChainProcessor::processRouting (const ChainRouting::Routing& r, juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
     const int n = buffer.getNumSamples();
 
     processLane (ChainRouting::pre, r, buffer, midi);
@@ -239,9 +376,87 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     }
 
     processLane (ChainRouting::post, r, buffer, midi);
+}
 
-    for (auto* fx : effects)
-        fx->setPlayHead (nullptr);
+bool ChainProcessor::isSlotActive (int slot) const noexcept
+{
+    return slotSource[(size_t) slot]->load() >= 0.5f && slotDestination[(size_t) slot].load() >= 0;
+}
+
+int ChainProcessor::findDestination (const juce::String& key) const
+{
+    for (size_t i = 0; i < destinations.size(); ++i)
+        if (destinations[i].key == key)
+            return (int) i;
+    return -1;
+}
+
+void ChainProcessor::setSlotDestination (int slot, int destination)
+{
+    if (! juce::isPositiveAndBelow (slot, numSlots))
+        return;
+
+    destination = juce::isPositiveAndBelow (destination, (int) destinations.size()) ? destination : -1;
+    if (slotDestination[(size_t) slot].exchange (destination) != destination)
+        updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+}
+
+// Avance les sources et pose les décalages sur les réglages visés
+void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part)
+{
+    const int n = part.getNumSamples();
+
+    ModulationSources::Settings settings;
+    for (int l = 0; l < 2; ++l)
+    {
+        settings.lfoRate[l]  = lfoRate[l]->load();
+        settings.lfoShape[l] = (int) lfoShape[l]->load();
+    }
+    settings.randomRate = randomRate->load();
+    settings.attackMs   = envAttack->load();
+    settings.releaseMs  = envRelease->load();
+    sources.setSettings (settings);
+
+    // Les sources écoutent ton jeu, avant les effets (mono)
+    if ((int) monoScratch.size() >= n)
+    {
+        const auto* left  = part.getReadPointer (0);
+        const auto* right = part.getReadPointer (part.getNumChannels() - 1);
+        for (int i = 0; i < n; ++i)
+            monoScratch[(size_t) i] = 0.5f * (left[i] + right[i]);
+        bool usesPitch = false;
+        for (int slot = 0; slot < numSlots; ++slot)
+            usesPitch = usesPitch || (isSlotActive (slot) && (int) slotSource[(size_t) slot]->load() == ModulationSources::pitch);
+
+        sources.process (monoScratch.data(), n, usesPitch);
+    }
+
+    for (int s = 0; s < ModulationSources::numSources; ++s)
+        sourceValues[(size_t) s].store (sources.get (s), std::memory_order_relaxed);
+
+    std::fill (modSum.begin(), modSum.end(), 0.0f);
+    for (int slot = 0; slot < numSlots; ++slot)
+    {
+        const int source = (int) slotSource[(size_t) slot]->load();
+        const int destination = slotDestination[(size_t) slot].load();
+        float out = 0.0f;
+
+        if (source > 0 && juce::isPositiveAndBelow (destination, (int) modSum.size()))
+        {
+            out = slotAmount[(size_t) slot]->load() * 0.01f * sources.get (source);
+            modSum[(size_t) destination] += out;
+        }
+        slotOutput[(size_t) slot].store (out, std::memory_order_relaxed);
+    }
+
+    for (size_t d = 0; d < modSum.size(); ++d)
+        if (! juce::exactlyEqual (modSum[d], modApplied[d]))
+        {
+            destinations[d].target->offset.store (modSum[d], std::memory_order_relaxed);
+            modApplied[d] = modSum[d];
+        }
+
+    chainTargets.update();
 }
 
 juce::AudioProcessorEditor* ChainProcessor::createEditor()
@@ -280,6 +495,14 @@ void ChainProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
 
+    // Destinations de la matrice, par leur nom ("delay/time") : robuste si des réglages s'ajoutent un jour
+    for (int slot = 0; slot < numSlots; ++slot)
+    {
+        const int d = slotDestination[(size_t) slot].load();
+        state.setProperty ("mod" + juce::String (slot + 1) + "dest",
+                           juce::isPositiveAndBelow (d, (int) destinations.size()) ? destinations[(size_t) d].key : juce::String(), nullptr);
+    }
+
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -317,6 +540,10 @@ void ChainProcessor::setStateInformation (const void* data, int sizeInBytes)
     // Absent des anciennes sessions : tout en série, dans l'ordre d'origine
     // (sans prévenir l'hôte : charger une session ne la modifie pas)
     routing.store (ChainRouting::Routing::fromString (state.getProperty ("routing").toString().toStdString()).pack());
+
+    // Absentes des anciennes sessions : aucune modulation
+    for (int slot = 0; slot < numSlots; ++slot)
+        slotDestination[(size_t) slot] = findDestination (state.getProperty ("mod" + juce::String (slot + 1) + "dest").toString());
 }
 
 // Point d'entrée appelé par Logic pour créer le plugin

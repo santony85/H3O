@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "UltraTapEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Ultra-Tap façon H3000 : delay multi-répétitions (jusqu'à 24), régulières, en rebond
 // ou en ralenti, qui s'éteignent ou qui montent, alternées gauche / droite.
@@ -41,6 +42,7 @@ public:
     UltraTapEngine::Settings currentSettings() const noexcept;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     static constexpr float maxPreDelayMs = 500.0f;

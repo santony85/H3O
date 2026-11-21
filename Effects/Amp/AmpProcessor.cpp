@@ -20,14 +20,14 @@ AmpProcessor::AmpProcessor()
 {
     input.attach (parameters);
 
-    inputGainParam  = parameters.getRawParameterValue ("inputgain");
-    gateParam       = parameters.getRawParameterValue ("gate");
-    bassParam       = parameters.getRawParameterValue ("bass");
-    midParam        = parameters.getRawParameterValue ("mid");
-    trebleParam     = parameters.getRawParameterValue ("treble");
-    outputGainParam = parameters.getRawParameterValue ("outputgain");
-    normaliseParam  = parameters.getRawParameterValue ("normalize");
-    cabParam        = parameters.getRawParameterValue ("cab");
+    inputGainParam  = modulation.get (parameters, "inputgain");
+    gateParam       = modulation.get (parameters, "gate");
+    bassParam       = modulation.get (parameters, "bass");
+    midParam        = modulation.get (parameters, "mid");
+    trebleParam     = modulation.get (parameters, "treble");
+    outputGainParam = modulation.get (parameters, "outputgain");
+    normaliseParam  = modulation.get (parameters, "normalize");
+    cabParam        = modulation.get (parameters, "cab");
 
     // tanh approchée : nettement plus rapide, inaudible
     nam::activations::Activation::enable_fast_tanh();
@@ -96,6 +96,7 @@ void AmpProcessor::configure (LoadedModel& m) const
 
 void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
     maxBlockSize = juce::jmax (samplesPerBlock, 32);
 
@@ -198,6 +199,7 @@ void AmpProcessor::processModel (float* data, int n)
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     // Choix de l'entrée (Stereo / Mono L / Mono R) : ensuite G et D contiennent le signal à traiter

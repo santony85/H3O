@@ -5,6 +5,7 @@
 #include "PitchDetector.h"
 #include "DiatonicScale.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 class HarmonizerProcessor : public juce::AudioProcessor
 {
@@ -37,6 +38,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     // Pour l'interface (mode Diatonic) : la note reconnue (-1 si aucune encore)

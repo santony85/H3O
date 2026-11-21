@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainProcessor.h"
+#include "ModulationPanel.h"
 
 // Un pédalier dessiné comme un schéma du signal :
 //
@@ -13,7 +14,8 @@
 // - on glisse une pédale pour changer sa place : dans la série, ou dans une des branches A / B ;
 // - clic droit sur une pédale : menu pour la ranger ou la décaler ;
 // - le menu Routing propose des routages tout prêts ;
-// - Balance, Spread et Cross Feedback règlent le mélange des deux branches.
+// - Balance, Spread et Cross Feedback règlent le mélange des deux branches ;
+// - le bouton Modulation affiche la matrice de modulation (un point violet marque les pédales modulées).
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer
 {
@@ -78,7 +80,8 @@ private:
 
     ChainProcessor& chain;
     InputMode::Box inputBox { chain.parameters, juce::Colours::white };
-    juce::TextButton routingButton;
+    juce::TextButton routingButton, modulationButton;
+    std::unique_ptr<ModulationPanel> modulationPanel;
     juce::TooltipWindow tooltips { this, 600 };
 
     // Police un peu plus petite pour les noms des pédales
@@ -93,7 +96,7 @@ private:
 
     std::vector<Pedal> pedals;   // indexé par ChainRouting::Effect
     BranchControl balance, spread, crossFeedback;
-    int selected = 0;
+    int selected = 0;   // pédale affichée, ou -1 pour la matrice de modulation
 
     // Schéma : routage affiché, séparation et fusion des branches, cases des branches vides
     ChainRouting::Routing shown = ChainRouting::Routing::series();

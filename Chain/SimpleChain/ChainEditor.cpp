@@ -24,6 +24,15 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     routingButton.onClick = [this] { showRoutingMenu(); };
     addAndMakeVisible (routingButton);
 
+    modulationButton.setButtonText ("Modulation");
+    modulationButton.setTooltip ("The modulation matrix: LFOs, envelope, pitch and random moving your pedals' settings");
+    modulationButton.setColour (juce::TextButton::buttonOnColourId, ModulationPanel::accent().darker (0.4f));
+    modulationButton.onClick = [this] { select (-1); };
+    addAndMakeVisible (modulationButton);
+
+    modulationPanel = std::make_unique<ModulationPanel> (chain);
+    addChildComponent (*modulationPanel);
+
     // Dans l'ordre de ChainRouting::Effect, mêmes couleurs que les interfaces des effets
     addPedal ("Filter",     juce::Colour (0xff90d040));
     addPedal ("Amp",        juce::Colour (0xffe06040));
@@ -47,6 +56,9 @@ ChainEditor::ChainEditor (ChainProcessor& p)
         width  = juce::jmax (width, pedal.editor->getWidth());
         height = juce::jmax (height, pedal.editor->getHeight());
     }
+
+    width  = juce::jmax (width, ModulationPanel::preferredWidth + 20);
+    height = juce::jmax (height, ModulationPanel::preferredHeight);
 
     // …et pour le schéma le plus large : toutes les pédales en série, plus la colonne des branches vides
     const int columns = ChainRouting::numEffects + 1;
@@ -130,6 +142,8 @@ void ChainEditor::select (int index)
         pedals[(size_t) i].selectButton->setToggleState (i == index, juce::dontSendNotification);
     }
 
+    modulationPanel->setVisible (index < 0);
+    modulationButton.setToggleState (index < 0, juce::dontSendNotification);
     repaint();
 }
 
@@ -454,12 +468,28 @@ void ChainEditor::paint (juce::Graphics& g)
         }
     }
 
-    // Fine ligne de la couleur de la pédale affichée, au-dessus de ses réglages
-    if (juce::isPositiveAndBelow (selected, (int) pedals.size()))
-    {
-        g.setColour (pedals[(size_t) selected].colour);
-        g.fillRect (0, headerHeight + stripHeight - 3, getWidth(), 3);
-    }
+    // Un point violet sur les pédales modulées
+    std::array<bool, ChainRouting::numEffects + 1> modulated {};
+    const auto& destinations = chain.getDestinations();
+    for (int slot = 0; slot < ChainProcessor::numSlots; ++slot)
+        if (chain.isSlotActive (slot))
+            modulated[(size_t) destinations[(size_t) chain.getSlotDestination (slot)].effect] = true;
+
+    g.setColour (ModulationPanel::accent());
+    for (int e = 0; e < (int) pedals.size(); ++e)
+        if (modulated[(size_t) e])
+        {
+            const auto b = pedals[(size_t) e].cell;
+            g.fillEllipse ((float) b.getRight() - 7.0f, (float) b.getY() - 3.0f, 8.0f, 8.0f);
+        }
+
+    if (modulated[ChainRouting::numEffects] && parallel)
+        g.fillEllipse ((float) mergeX - 4.0f, (yA + yB) * 0.5f - 4.0f, 8.0f, 8.0f);   // Balance / Spread / Cross Feedback
+
+    // Fine ligne de la couleur de la pédale affichée (ou de la matrice), au-dessus de ses réglages
+    g.setColour (juce::isPositiveAndBelow (selected, (int) pedals.size()) ? pedals[(size_t) selected].colour
+                                                                            : ModulationPanel::accent());
+    g.fillRect (0, headerHeight + stripHeight - 3, getWidth(), 3);
 }
 
 void ChainEditor::paintOverChildren (juce::Graphics& g)
@@ -560,6 +590,8 @@ void ChainEditor::resized()
     inputBox.setBounds (header.removeFromRight (InputMode::Box::preferredWidth + 15).withTrimmedRight (15).reduced (0, 5));
     header.removeFromLeft (170);   // le titre
     routingButton.setBounds (header.removeFromLeft (230).reduced (0, 7));
+    header.removeFromLeft (8);
+    modulationButton.setBounds (header.removeFromLeft (110).reduced (0, 7));
 
     auto strip = getLocalBounds().withTrimmedTop (headerHeight).removeFromTop (stripHeight - 3);
     diagram = strip.removeFromTop (diagramHeight).reduced (10, 0);
@@ -578,4 +610,5 @@ void ChainEditor::resized()
     // Réglages de la pédale affichée
     for (auto& pedal : pedals)
         pedal.editor->setTopLeftPosition ((getWidth() - pedal.editor->getWidth()) / 2, headerHeight + stripHeight);
+    modulationPanel->setTopLeftPosition ((getWidth() - modulationPanel->getWidth()) / 2, headerHeight + stripHeight);
 }

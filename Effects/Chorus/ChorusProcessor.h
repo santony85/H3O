@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "ChorusEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Chorus stéréo multi-voix façon H3000 : jusqu'à 4 voix par côté,
 // LFO en quadrature gauche/droite, feedback positif ou négatif, filtre Tone.
@@ -38,6 +39,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     static constexpr float maxBaseDelayMs = 40.0f;

@@ -12,6 +12,8 @@
 #include "UltraTap/UltraTapProcessor.h"
 #include "Reverb/ReverbProcessor.h"
 #include "ChainRouting.h"
+#include "ModulationSources.h"
+#include "Common/ModTargets.h"
 
 // Multi-effets : fait passer le son dans chaque effet, dans l'ordre choisi,
 // avec deux branches parallèles A et B possibles (voir ChainRouting.h).
@@ -76,6 +78,30 @@ public:
     ChainRouting::Routing getRouting() const noexcept { return ChainRouting::Routing::unpack (routing.load()); }
     void setRouting (const ChainRouting::Routing&);
 
+    // Matrice de modulation : 8 lignes « source → destination × quantité »
+    static constexpr int numSlots = 8;
+
+    struct Destination
+    {
+        juce::String key;          // "delay/time" : enregistré dans les sessions
+        juce::String effectName;   // "Delay"
+        juce::String paramName;    // "Time"
+        int effect = 0;            // ChainRouting::Effect, ou numEffects pour les branches
+        ModTargets::Target* target = nullptr;
+    };
+
+    const std::vector<Destination>& getDestinations() const noexcept { return destinations; }
+    int getSlotDestination (int slot) const noexcept   { return slotDestination[(size_t) slot].load(); }
+    void setSlotDestination (int slot, int destination);
+    int findDestination (const juce::String& key) const;
+
+    static juce::String slotParamId (int slot, const char* name) { return "mod" + juce::String (slot + 1) + name; }
+
+    // Pour l'affichage : la valeur de chaque source, et ce que chaque ligne ajoute en ce moment
+    float getSourceValue (int source) const noexcept   { return sourceValues[(size_t) juce::jlimit (0, (int) ModulationSources::numSources - 1, source)].load(); }
+    float getSlotOutput (int slot) const noexcept      { return slotOutput[(size_t) slot].load(); }
+    bool isSlotActive (int slot) const noexcept;
+
     juce::AudioProcessor& effect (int id) noexcept { return *effects[(size_t) id]; }
     bool isEffectOn (int id) const noexcept        { return onParams[(size_t) id]->load() >= 0.5f; }
     static const char* onParamId (int id);
@@ -98,6 +124,20 @@ private:
     juce::SmoothedValue<float> feedbackGain;
 
     void processLane (int lane, const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
+    void processRouting (const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
+    void updateModulation (const juce::AudioBuffer<float>&);
+
+    // Modulation
+    ModTargets chainTargets;   // Balance, Spread, Cross Feedback
+    std::vector<Destination> destinations;
+    std::array<std::atomic<int>, numSlots> slotDestination;
+    std::array<std::atomic<float>*, numSlots> slotSource {}, slotAmount {};
+    std::array<std::atomic<float>, numSlots> slotOutput;
+    std::array<std::atomic<float>, ModulationSources::numSources> sourceValues;
+    std::vector<float> modSum, modApplied;   // décalage de chaque destination (calculé, déjà posé)
+    std::vector<float> monoScratch;
+    ModulationSources sources;
+    std::atomic<float>* lfoRate[2] {}, *lfoShape[2] {}, *randomRate = nullptr, *envAttack = nullptr, *envRelease = nullptr;
 
     std::atomic<float>* harmonizerOn = nullptr;
     std::atomic<float>* ampOn = nullptr;

@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 class DelayProcessor : public juce::AudioProcessor
 {
@@ -36,6 +37,7 @@ public:
 
     // Paramètres exposés à Logic (automatisables)
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     // Divisions de note proposées en mode Sync (affichées dans l'interface)

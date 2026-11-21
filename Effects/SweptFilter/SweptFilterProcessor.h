@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SweptFilterEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Swept Filter façon H3000 : filtre résonant balayé par un LFO ou par l'attaque du jeu (auto-wah).
 class SweptFilterProcessor : public juce::AudioProcessor
@@ -42,6 +43,7 @@ public:
     float getPosition (int channel) const noexcept { return position[channel & 1].load(); }
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
 private:

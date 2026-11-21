@@ -39,18 +39,18 @@ LayeredShiftProcessor::LayeredShiftProcessor()
 
     for (int l = 0; l < 2; ++l)
     {
-        layerParams[l].semitones = parameters.getRawParameterValue (layerId (l, "semi"));
-        layerParams[l].cents     = parameters.getRawParameterValue (layerId (l, "cents"));
-        layerParams[l].delayMs   = parameters.getRawParameterValue (layerId (l, "delay"));
-        layerParams[l].level     = parameters.getRawParameterValue (layerId (l, "level"));
+        layerParams[l].semitones = modulation.get (parameters, layerId (l, "semi"));
+        layerParams[l].cents     = modulation.get (parameters, layerId (l, "cents"));
+        layerParams[l].delayMs   = modulation.get (parameters, layerId (l, "delay"));
+        layerParams[l].level     = modulation.get (parameters, layerId (l, "level"));
     }
 
-    detuneParam     = parameters.getRawParameterValue ("detune");
-    sweepRateParam  = parameters.getRawParameterValue ("sweeprate");
-    sweepDepthParam = parameters.getRawParameterValue ("sweepdepth");
-    feedbackParam   = parameters.getRawParameterValue ("feedback");
-    toneParam       = parameters.getRawParameterValue ("tone");
-    mixParam        = parameters.getRawParameterValue ("mix");
+    detuneParam     = modulation.get (parameters, "detune");
+    sweepRateParam  = modulation.get (parameters, "sweeprate");
+    sweepDepthParam = modulation.get (parameters, "sweepdepth");
+    feedbackParam   = modulation.get (parameters, "feedback");
+    toneParam       = modulation.get (parameters, "tone");
+    mixParam        = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout LayeredShiftProcessor::createParameterLayout()
@@ -152,6 +152,7 @@ bool LayeredShiftProcessor::isBusesLayoutSupported (const BusesLayout& layouts) 
 
 void LayeredShiftProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate);
@@ -170,6 +171,7 @@ void LayeredShiftProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 
 void LayeredShiftProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

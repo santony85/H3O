@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "ReverseEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Reverse Shift façon H3000 : le son revient joué à l'envers, par tranches,
 // éventuellement transposé (octave au-dessus, quinte…), avec feedback pour des nappes.
@@ -38,6 +39,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     static constexpr float minLengthMs = 50.0f;

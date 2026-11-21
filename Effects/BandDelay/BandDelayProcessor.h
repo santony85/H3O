@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "BandDelayEngine.h"
 #include "Common/InputMode.h"
+#include "Common/ModTargets.h"
 
 // Band Delay façon H3000 : jusqu'à 8 échos, chacun dans son propre filtre résonant
 // (sa couleur), avec son propre retour, alternés gauche / droite.
@@ -40,6 +41,7 @@ public:
     BandDelayEngine::Settings currentSettings() const noexcept;
 
     juce::AudioProcessorValueTreeState parameters;
+    ModTargets modulation;   // valeurs lues par l'effet (réglage + modulation)
     InputMode::Selector input;
 
     static constexpr float maxTimeMs = 2000.0f;

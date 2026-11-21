@@ -65,6 +65,43 @@ int main (int argc, char** argv)
             }
     }
 
+    // La matrice de modulation, avec deux lignes actives et un peu de son passé dedans
+    {
+        ChainProcessor chain;
+        chain.prepareToPlay (48000.0, 512);
+        chain.setRouting (ChainRouting::templates()[1].routing);
+
+        auto set = [&chain] (const juce::String& id, float value)
+        {
+            auto* param = chain.parameters.getParameter (id);
+            param->setValueNotifyingHost (param->convertTo0to1 (value));
+        };
+        set ("mod1source", (float) ModulationSources::lfo1);
+        set ("mod1amount", 40.0f);
+        chain.setSlotDestination (0, chain.findDestination ("delay/time"));
+        set ("mod2source", (float) ModulationSources::envelope);
+        set ("mod2amount", -60.0f);
+        chain.setSlotDestination (1, chain.findDestination ("branches/branchspread"));
+        set ("mod3source", (float) ModulationSources::random);
+        chain.setSlotDestination (2, chain.findDestination ("layered/sweepdepth"));
+
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 30; ++b)
+        {
+            for (int i = 0; i < 512; ++i)
+                buffer.setSample (0, i, 0.3f * std::sin (0.03f * (float) (b * 512 + i))), buffer.setSample (1, i, buffer.getSample (0, i));
+            chain.processBlock (buffer, midi);
+        }
+
+        std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
+        for (auto* child : editor->getChildren())
+            if (auto* button = dynamic_cast<juce::TextButton*> (child); button != nullptr && button->getButtonText() == "Modulation")
+                button->onClick();
+        editor->repaint();
+        save (*editor, folder.getChildFile ("Modulation.png"));
+    }
+
     // Les routages tout prêts : le schéma avec ses branches
     const auto& templates = ChainRouting::templates();
     for (size_t i = 1; i < templates.size(); ++i)

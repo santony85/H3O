@@ -30,14 +30,14 @@ ChorusProcessor::ChorusProcessor()
 {
     input.attach (parameters);
 
-    rateParam     = parameters.getRawParameterValue ("rate");
-    depthParam    = parameters.getRawParameterValue ("depth");
-    delayParam    = parameters.getRawParameterValue ("delay");
-    voicesParam   = parameters.getRawParameterValue ("voices");
-    feedbackParam = parameters.getRawParameterValue ("feedback");
-    widthParam    = parameters.getRawParameterValue ("width");
-    toneParam     = parameters.getRawParameterValue ("tone");
-    mixParam      = parameters.getRawParameterValue ("mix");
+    rateParam     = modulation.get (parameters, "rate");
+    depthParam    = modulation.get (parameters, "depth");
+    delayParam    = modulation.get (parameters, "delay");
+    voicesParam   = modulation.get (parameters, "voices");
+    feedbackParam = modulation.get (parameters, "feedback");
+    widthParam    = modulation.get (parameters, "width");
+    toneParam     = modulation.get (parameters, "tone");
+    mixParam      = modulation.get (parameters, "mix");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ChorusProcessor::createParameterLayout()
@@ -131,6 +131,7 @@ bool ChorusProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ChorusProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     currentSampleRate = sampleRate;
 
     engine.setVoices ((int) voicesParam->load());
@@ -157,6 +158,7 @@ void ChorusProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void ChorusProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
+    modulation.update();   // réglages + modulation de Simple Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();
