@@ -10,6 +10,7 @@
 //
 // Le décalage est exprimé dans l'échelle du bouton (0 à 1, avec sa courbe) :
 // +0,25 = un quart de la course du bouton vers la droite.
+// Pour un réglage par crans de −24 à +24 demi-tons (48 crans), +7 demi-tons = +7/48.
 class ModTargets
 {
 public:
@@ -19,16 +20,23 @@ public:
         std::atomic<float>* base = nullptr;     // valeur du réglage (APVTS)
         std::atomic<float> value { 0.0f };      // valeur effective, lue par l'effet
         std::atomic<float> offset { 0.0f };     // décalage posé par la matrice
+        int numSteps = 0;                       // réglage par crans (demi-tons, nombre de voix…) : nombre de crans, sinon 0
     };
 
     // À la place de parameters.getRawParameterValue (id) : même usage, valeur modulée
     std::atomic<float>* get (juce::AudioProcessorValueTreeState& state, const juce::String& id)
     {
-        // Menus et interrupteurs : pas modulables, l'effet lit directement le réglage
-        if (dynamic_cast<juce::AudioParameterFloat*> (state.getParameter (id)) == nullptr)
+        // Menus et interrupteurs : pas modulables, l'effet lit directement le réglage.
+        // Réglages continus et par crans : modulables. Un réglage par crans retombe toujours
+        // sur un cran entier (JUCE arrondit la valeur au cran le plus proche).
+        auto* parameter = state.getParameter (id);
+        auto* stepped = dynamic_cast<juce::AudioParameterInt*> (parameter);
+        if (dynamic_cast<juce::AudioParameterFloat*> (parameter) == nullptr && stepped == nullptr)
             return state.getRawParameterValue (id);
 
         auto target = std::make_unique<Target>();
+        if (stepped != nullptr)
+            target->numSteps = stepped->getRange().getLength();
         target->parameter = state.getParameter (id);
         target->base      = state.getRawParameterValue (id);
         jassert (target->parameter != nullptr && target->base != nullptr);

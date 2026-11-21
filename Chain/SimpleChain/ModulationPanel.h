@@ -64,6 +64,7 @@ private:
 
     void setupKnob (Knob&, const juce::String& paramId, const juce::String& name);
     void showDestinationMenu (int slot);
+    const ChainProcessor::Destination* steppedDestination (int slot) const;   // nullptr si continue ou aucune
     void timerCallback() override;
 
     static void drawMeter (juce::Graphics&, juce::Rectangle<int>, float value, bool bipolar, juce::Colour);

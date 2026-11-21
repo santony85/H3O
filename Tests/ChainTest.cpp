@@ -372,9 +372,8 @@ namespace
             check (chain.findDestination ("delay/time") >= 0 && chain.findDestination ("reverb/decay") >= 0
                    && chain.findDestination ("branches/branchspread") >= 0,
                    "destinations : réglages des effets et des branches");
-            check (chain.findDestination ("delay/sync") < 0 && chain.findDestination ("reverb/type") < 0
-                   && chain.findDestination ("harmonizer/asemi") < 0,
-                   "pas de menus, d'interrupteurs ni de réglages par crans");
+            check (chain.findDestination ("delay/sync") < 0 && chain.findDestination ("reverb/type") < 0,
+                   "pas de menus ni d'interrupteurs");
             std::printf ("        %d destinations\n", (int) chain.getDestinations().size());
         }
 
@@ -562,6 +561,78 @@ namespace
         }
     }
 
+    void steppedModulation()
+    {
+        std::printf ("\n--- Modulation des réglages par crans ---\n");
+
+        ChainProcessor chain;
+        juce::StringArray stepped;
+        for (auto& d : chain.getDestinations())
+            if (d.numSteps > 0)
+                stepped.add (d.key + " (" + juce::String (d.numSteps) + ")");
+        std::printf ("        %s\n", stepped.joinIntoString (", ").toRawUTF8());
+
+        const int semi = chain.findDestination ("harmonizer/asemi");
+        check (semi >= 0 && chain.getDestinations()[(size_t) semi].numSteps > 0
+               && chain.findDestination ("harmonizer/adegrees") >= 0 && chain.findDestination ("ultratap/taps") >= 0,
+               "demi-tons, intervalles et nombres de taps sont des destinations");
+
+        // LFO carré (+1) → Harmonizer voix A +7 demi-tons : la quinte au-dessus du réglage
+        auto* target = chain.harmonizer.modulation.find ("asemi");
+        const int steps = chain.getDestinations()[(size_t) semi].numSteps;
+        const float base = target->base->load();
+
+        setParam (chain, "lfo1rate", 0.02f);
+        setParam (chain, "lfo1shape", (float) ModulationSources::square);
+        setParam (chain, "mod1source", (float) ModulationSources::lfo1);
+        setParam (chain, "mod1amount", 100.0f * 7.0f / (float) steps);
+        chain.setSlotDestination (0, semi);
+        run (chain, 10);
+        std::printf ("        réglage %+.0f, valeur jouée %+.3f\n", base, target->value.load());
+        check (target->value.load() == base + 7.0f, "LFO 1 → +7 demi-tons : exactement une quinte au-dessus");
+        check (target->base->load() == base, "le réglage des demi-tons n'est pas touché");
+
+        // LFO sinus lent sur ±12 demi-tons : la valeur jouée est toujours un demi-ton entier, et parcourt la plage
+        ChainProcessor sweep;
+        setParam (sweep, "lfo1rate", 1.0f);
+        setParam (sweep, "lfo1shape", (float) ModulationSources::sine);
+        setParam (sweep, "mod1source", (float) ModulationSources::lfo1);
+        setParam (sweep, "mod1amount", 100.0f * 12.0f / (float) steps);
+        sweep.setSlotDestination (0, semi);
+
+        auto* t = sweep.harmonizer.modulation.find ("asemi");
+        sweep.setRateAndBufferSizeDetails (rate, blockSize);
+        sweep.prepareToPlay (rate, blockSize);
+        juce::AudioBuffer<float> buffer (2, blockSize);
+        juce::MidiBuffer midi;
+
+        bool whole = true;
+        float lo = 100.0f, hi = -100.0f;
+        int changes = 0;
+        float last = t->value.load();
+        for (int b = 0; b < (int) (rate / blockSize); ++b)   // une seconde = un cycle
+        {
+            buffer.clear();
+            sweep.processBlock (buffer, midi);
+            const float v = t->value.load();
+            whole = whole && v == std::round (v);
+            lo = std::min (lo, v);
+            hi = std::max (hi, v);
+            changes += v != last ? 1 : 0;
+            last = v;
+        }
+        std::printf ("        de %+.0f à %+.0f demi-tons, %d changements\n", lo, hi, changes);
+        check (whole, "LFO sinus : toujours un demi-ton entier (par crans)");
+        check (lo <= base - 11.0f && hi >= base + 11.0f, "LFO sinus ±12 : parcourt la plage d'une octave en dessous à une au-dessus");
+
+        // Destination par crans enregistrée par son nom
+        juce::MemoryBlock state;
+        chain.getStateInformation (state);
+        ChainProcessor restored;
+        restored.setStateInformation (state.getData(), (int) state.getSize());
+        check (restored.getSlotDestination (0) == semi, "destination Harmonizer · demi-tons enregistrée puis relue");
+    }
+
     void sessions()
     {
         using namespace ChainRouting;
@@ -604,6 +675,7 @@ int main()
     modulationSources();
     modulationMatrix();
     tempoSync();
+    steppedModulation();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");
     return failures == 0 ? 0 : 1;

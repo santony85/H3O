@@ -87,6 +87,8 @@ public:
         juce::String effectName;   // "Delay"
         juce::String paramName;    // "Time"
         int effect = 0;            // ChainRouting::Effect, ou numEffects pour les branches
+        int numSteps = 0;          // réglage par crans : nombre de crans de toute la course, sinon 0
+        juce::String stepUnit;     // "st" pour des demi-tons, sinon vide
         ModTargets::Target* target = nullptr;
     };
 

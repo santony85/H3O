@@ -84,6 +84,9 @@ int main (int argc, char** argv)
         set ("mod2source", (float) ModulationSources::envelope);
         set ("mod2amount", -60.0f);
         chain.setSlotDestination (1, chain.findDestination ("branches/branchspread"));
+        set ("mod4source", (float) ModulationSources::lfo2);
+        chain.setSlotDestination (3, chain.findDestination ("harmonizer/asemi"));
+        set ("mod4amount", 100.0f * 7.0f / 48.0f);   // +7 demi-tons
         set ("mod3source", (float) ModulationSources::random);
         chain.setSlotDestination (2, chain.findDestination ("layered/sweepdepth"));
 

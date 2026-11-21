@@ -157,6 +157,8 @@ ChainProcessor::ChainProcessor()
             d.paramName  = list[i].parameter->getName (40);
             d.effect     = e;
             d.target     = &list[i];
+            d.numSteps   = list[i].numSteps;
+            d.stepUnit   = list[i].parameter->getLabel();
             destinations.push_back (d);
         }
     }

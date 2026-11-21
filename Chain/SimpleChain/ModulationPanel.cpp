@@ -75,10 +75,31 @@ ModulationPanel::ModulationPanel (ChainProcessor& p)
         row.amount.setDoubleClickReturnValue (true, 0.0);
         row.amount.setColour (juce::Slider::trackColourId, accent().withAlpha (0.45f));
         row.amount.setTooltip ("How far the setting moves: 100 % = the whole travel of its knob. Negative = the other way.");
-        row.amount.setTextValueSuffix (" %");
         addAndMakeVisible (row.amount);
         row.amountAttachment = std::make_unique<SliderAttachment> (chain.parameters, ChainProcessor::slotParamId (slot, "amount"), row.amount);
-        row.amount.setNumDecimalPlacesToDisplay (0);
+
+        // Après l'attachement (qui pose ses propres fonctions) : quantité en % de la course,
+        // ou en crans pour un réglage par crans (« +7 st » = une quinte). On peut taper l'un ou l'autre.
+        row.amount.textFromValueFunction = [this, slot] (double value)
+        {
+            if (const auto* d = steppedDestination (slot))
+            {
+                const double steps = value * 0.01 * d->numSteps;
+                const bool whole = std::abs (steps - std::round (steps)) < 0.05;
+                return (steps > 0.0 ? "+" : "") + (whole ? juce::String (juce::roundToInt (steps)) : juce::String (steps, 1))
+                       + " " + (d->stepUnit.isNotEmpty() ? d->stepUnit : juce::String ("steps"));
+            }
+            return juce::String (juce::roundToInt (value)) + " %";
+        };
+
+        row.amount.valueFromTextFunction = [this, slot] (const juce::String& text)
+        {
+            const double number = text.retainCharacters ("-+0123456789.").getDoubleValue();
+            if (const auto* d = steppedDestination (slot))
+                return number * 100.0 / d->numSteps;
+            return number;
+        };
+        row.amount.updateText();
     }
 
     setSize (preferredWidth, preferredHeight);
@@ -123,6 +144,13 @@ void ModulationPanel::setupKnob (Knob& knob, const juce::String& paramId, const 
     knob.attachment = std::make_unique<SliderAttachment> (chain.parameters, paramId, knob.slider);
 }
 
+const ChainProcessor::Destination* ModulationPanel::steppedDestination (int slot) const
+{
+    const auto& list = chain.getDestinations();
+    const int d = chain.getSlotDestination (slot);
+    return juce::isPositiveAndBelow (d, (int) list.size()) && list[(size_t) d].numSteps > 0 ? &list[(size_t) d] : nullptr;
+}
+
 void ModulationPanel::showDestinationMenu (int slot)
 {
     const auto& list = chain.getDestinations();
@@ -153,7 +181,8 @@ void ModulationPanel::showDestinationMenu (int slot)
             subHasCurrent = false;
         }
 
-        sub.addItem ((int) i + 1, list[i].paramName, true, (int) i == current);
+        sub.addItem ((int) i + 1, list[i].paramName + (list[i].numSteps > 0 ? juce::String::fromUTF8 (" (steps)") : juce::String()),
+                     true, (int) i == current);
         subHasCurrent = subHasCurrent || (int) i == current;
     }
 
@@ -198,7 +227,10 @@ void ModulationPanel::timerCallback()
                               : juce::String::fromUTF8 ("Choose a destination\xe2\x80\xa6");
 
         if (row.destination.getButtonText() != text)
+        {
             row.destination.setButtonText (text);
+            row.amount.updateText();   // % ou crans, selon la destination
+        }
 
         row.destination.setColour (juce::TextButton::textColourOffId, d >= 0 ? juce::Colours::white : dim);
 
