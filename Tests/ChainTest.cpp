@@ -455,6 +455,113 @@ namespace
         }
     }
 
+    // Imite Logic : tempo, signature, lecture et position dans le morceau
+    struct TestPlayHead : juce::AudioPlayHead
+    {
+        double bpm = 120.0, ppq = 0.0;
+        bool playing = true;
+        int numerator = 4;
+
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo info;
+            info.setBpm (bpm);
+            info.setPpqPosition (ppq);
+            info.setIsPlaying (playing);
+            info.setTimeSignature (TimeSignature { numerator, 4 });
+            return info;
+        }
+    };
+
+    void tempoSync()
+    {
+        std::printf ("\n--- LFO synchronisés au tempo ---\n");
+
+        check (ModulationSources::divisionQuarters (8) == 1.0 && ModulationSources::divisionQuarters (3) == 4.0
+               && ModulationSources::divisionQuarters (3, 3.0) == 3.0 && std::abs (ModulationSources::divisionQuarters (9) - 2.0 / 3.0) < 1e-9,
+               "divisions : 1/4 = une noire, 1 Bar = 4 noires (3 en 3/4), triolet");
+
+        const double secondsPerBlock = blockSize / rate;
+
+        // Morceau en lecture, 120 BPM, LFO 1 en dent de scie sur une noire : sa phase suit la position
+        {
+            ChainProcessor chain;
+            TestPlayHead head;
+            head.ppq = 7.3;   // lecture lancée au milieu d'un temps
+            chain.setPlayHead (&head);
+            setParam (chain, "lfo1sync", 1.0f);
+            setParam (chain, "lfo1division", 8.0f);   // 1/4
+            setParam (chain, "lfo1shape", (float) ModulationSources::sawUp);
+            setParam (chain, "mod1source", (float) ModulationSources::lfo1);
+            chain.setSlotDestination (0, chain.findDestination ("delay/mix"));
+
+            chain.setRateAndBufferSizeDetails (rate, blockSize);
+            chain.prepareToPlay (rate, blockSize);
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            juce::MidiBuffer midi;
+
+            float worst = 0.0f;
+            for (int b = 0; b < 100; ++b)
+            {
+                buffer.clear();
+                chain.processBlock (buffer, midi);
+                head.ppq += secondsPerBlock * head.bpm / 60.0;   // position à la fin du bloc = début du suivant
+
+                const float expected = ModulationSources::shapeAt (ModulationSources::sawUp, head.ppq - std::floor (head.ppq));
+                float error = std::abs (chain.getSourceValue (ModulationSources::lfo1) - expected);
+                error = std::min (error, 2.0f - error);   // au passage de +1 à −1, les deux sont justes
+                worst = std::max (worst, error);
+            }
+            std::printf ("        écart max avec la position du morceau %.2e\n", worst);
+            check (worst < 1.0e-3f, "en lecture : le LFO suit la position du morceau (1/4 à 120 BPM)");
+
+            // Saut dans le morceau (boucle) : le LFO repart au bon endroit
+            head.ppq = 32.25;
+            chain.processBlock (buffer, midi);
+            head.ppq += secondsPerBlock * 2.0;
+            const float expected = ModulationSources::shapeAt (ModulationSources::sawUp, head.ppq - std::floor (head.ppq));
+            check (std::abs (chain.getSourceValue (ModulationSources::lfo1) - expected) < 1.0e-3f, "retour en début de boucle : le LFO repart calé");
+            chain.setPlayHead (nullptr);
+        }
+
+        // Morceau arrêté, 90 BPM, 1 Bar en 3/4 : tourne seul à 90 / 60 / 3 = 0,5 Hz
+        {
+            ChainProcessor chain;
+            TestPlayHead head;
+            head.bpm = 90.0;
+            head.playing = false;
+            head.numerator = 3;
+            chain.setPlayHead (&head);
+            setParam (chain, "lfo2sync", 1.0f);
+            setParam (chain, "lfo2division", 3.0f);   // 1 Bar
+            setParam (chain, "lfo2shape", (float) ModulationSources::sawUp);
+
+            chain.setRateAndBufferSizeDetails (rate, blockSize);
+            chain.prepareToPlay (rate, blockSize);
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            juce::MidiBuffer midi;
+
+            const int blocks = 150;
+            for (int b = 0; b < blocks; ++b)
+            {
+                buffer.clear();
+                chain.processBlock (buffer, midi);
+            }
+            const double cycles = 0.5 * blocks * secondsPerBlock;
+            const float expected = ModulationSources::shapeAt (ModulationSources::sawUp, cycles - std::floor (cycles));
+            std::printf ("        LFO 2 %.4f, attendu %.4f (tempo lu %.0f BPM)\n", chain.getSourceValue (ModulationSources::lfo2), expected, chain.getTempo());
+            check (std::abs (chain.getSourceValue (ModulationSources::lfo2) - expected) < 1.0e-3f && chain.getTempo() == 90.0f,
+                   "arrêté : tourne seul au tempo (1 Bar en 3/4 à 90 BPM = 0,5 Hz)");
+            chain.setPlayHead (nullptr);
+        }
+
+        // Sans hôte (application autonome) : 120 BPM
+        {
+            ChainProcessor chain;
+            check (chain.getTempo() == 120.0f, "sans hôte : 120 BPM");
+        }
+    }
+
     void sessions()
     {
         using namespace ChainRouting;
@@ -496,6 +603,7 @@ int main()
     sessions();
     modulationSources();
     modulationMatrix();
+    tempoSync();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");
     return failures == 0 ? 0 : 1;

@@ -25,6 +25,7 @@ public:
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
     struct Knob
     {
@@ -39,6 +40,13 @@ private:
         int source = 0;
         juce::ComboBox shape;
         std::unique_ptr<ComboAttachment> shapeAttachment;
+
+        // LFO seulement : synchronisation au tempo
+        juce::ToggleButton sync { "Sync" };
+        std::unique_ptr<ButtonAttachment> syncAttachment;
+        juce::ComboBox division;
+        std::unique_ptr<ComboAttachment> divisionAttachment;
+        juce::Label tempo;
         std::vector<Knob*> knobs;
         juce::Rectangle<int> bounds, meter;
     };

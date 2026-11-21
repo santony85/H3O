@@ -33,6 +33,27 @@ public:
 
     static bool isBipolar (int s) { return s == lfo1 || s == lfo2 || s == random; }
 
+    // Divisions de tempo pour les LFO synchronisés. "." = pointée, "T" = triolet.
+    static constexpr int numDivisions = 15;
+
+    static const char* divisionName (int d)
+    {
+        static const char* names[] = { "8 Bars", "4 Bars", "2 Bars", "1 Bar", "1/2 .", "1/2", "1/2 T",
+                                       "1/4 .", "1/4", "1/4 T", "1/8 .", "1/8", "1/8 T", "1/16", "1/16 T" };
+        return names[std::clamp (d, 0, numDivisions - 1)];
+    }
+
+    // Durée d'un cycle, en noires. Les mesures suivent la signature rythmique (4 noires en 4/4, 3 en 3/4…)
+    static double divisionQuarters (int d, double quartersPerBar = 4.0)
+    {
+        static const double beats[] = { -8.0, -4.0, -2.0, -1.0, 3.0, 2.0, 4.0 / 3.0,
+                                        1.5, 1.0, 2.0 / 3.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0 };
+        const double b = beats[std::clamp (d, 0, numDivisions - 1)];
+        return b < 0.0 ? -b * quartersPerBar : b;   // négatif = en mesures
+    }
+
+    static constexpr int defaultDivision = 3;   // 1 Bar
+
     struct Settings
     {
         float lfoRate[2]  { 0.5f, 3.0f };      // Hz
@@ -65,6 +86,10 @@ public:
     }
 
     void setSettings (const Settings& s) { settings = s; }
+
+    // LFO synchronisé et morceau en lecture : place le LFO à la phase voulue (0 … 1)
+    // au début du prochain paquet, pour qu'il reste calé sur les mesures
+    void setLfoPhase (int l, double p) noexcept { phase[l & 1] = p - std::floor (p); }
 
     // Avance de n échantillons. mono : le signal joué (avant les effets).
     // trackPitch : la détection de note coûte du calcul, seulement si une ligne utilise Pitch

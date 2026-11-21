@@ -102,6 +102,9 @@ public:
     float getSlotOutput (int slot) const noexcept      { return slotOutput[(size_t) slot].load(); }
     bool isSlotActive (int slot) const noexcept;
 
+    // Tempo suivi par les LFO synchronisés : celui de Logic, ou 120 BPM sans hôte (application autonome)
+    float getTempo() const noexcept { return tempo.load(); }
+
     juce::AudioProcessor& effect (int id) noexcept { return *effects[(size_t) id]; }
     bool isEffectOn (int id) const noexcept        { return onParams[(size_t) id]->load() >= 0.5f; }
     static const char* onParamId (int id);
@@ -125,7 +128,13 @@ private:
 
     void processLane (int lane, const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
     void processRouting (const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
-    void updateModulation (const juce::AudioBuffer<float>&);
+    void updateModulation (const juce::AudioBuffer<float>&, int startInBlock);
+
+    // Position du morceau au début du bloc (pour caler les LFO)
+    std::atomic<float> tempo { 120.0f };
+    double blockPpq = 0.0, quartersPerBar = 4.0;
+    bool hostPlaying = false;
+    std::atomic<float>* lfoSync[2] {}, *lfoDivision[2] {};
 
     // Modulation
     ModTargets chainTargets;   // Balance, Spread, Cross Feedback

@@ -78,6 +78,8 @@ int main (int argc, char** argv)
         };
         set ("mod1source", (float) ModulationSources::lfo1);
         set ("mod1amount", 40.0f);
+        set ("lfo1sync", 1.0f);
+        set ("lfo1division", 8.0f);   // 1/4
         chain.setSlotDestination (0, chain.findDestination ("delay/time"));
         set ("mod2source", (float) ModulationSources::envelope);
         set ("mod2amount", -60.0f);

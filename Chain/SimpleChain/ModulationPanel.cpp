@@ -29,6 +29,24 @@ ModulationPanel::ModulationPanel (ChainProcessor& p)
             box.shape.addItem (ModulationSources::shapeName (s), s + 1);
         addAndMakeVisible (box.shape);
         box.shapeAttachment = std::make_unique<ComboAttachment> (chain.parameters, "lfo" + juce::String (l + 1) + "shape", box.shape);
+
+        const juce::String prefix = "lfo" + juce::String (l + 1);
+        box.sync.setColour (juce::ToggleButton::tickColourId, accent());
+        box.sync.setTooltip ("Follows the tempo of your song, locked to its bars while it plays");
+        addAndMakeVisible (box.sync);
+        box.syncAttachment = std::make_unique<ButtonAttachment> (chain.parameters, prefix + "sync", box.sync);
+
+        for (int d = 0; d < ModulationSources::numDivisions; ++d)
+            box.division.addItem (ModulationSources::divisionName (d), d + 1);
+        box.division.setJustificationType (juce::Justification::centred);
+        box.division.setTooltip ("One LFO cycle lasts this long");
+        addChildComponent (box.division);
+        box.divisionAttachment = std::make_unique<ComboAttachment> (chain.parameters, prefix + "division", box.division);
+
+        box.tempo.setJustificationType (juce::Justification::centred);
+        box.tempo.setFont (juce::FontOptions (12.0f));
+        box.tempo.setColour (juce::Label::textColourId, dim);
+        addChildComponent (box.tempo);
     }
 
     juce::StringArray sourceNames;
@@ -154,6 +172,23 @@ void ModulationPanel::timerCallback()
 {
     const auto& list = chain.getDestinations();
 
+    // LFO synchronisé : la division et le tempo remplacent le bouton Rate
+    for (int l = 0; l < 2; ++l)
+    {
+        auto& box = boxes[(size_t) l];
+        const bool synced = box.sync.getToggleState();
+        box.division.setVisible (synced);
+        box.tempo.setVisible (synced);
+        const float bpm = chain.getTempo();
+        const bool whole = std::abs (bpm - std::round (bpm)) < 0.05f;
+        box.tempo.setText ((whole ? juce::String (juce::roundToInt (bpm)) : juce::String (bpm, 1)) + " BPM", juce::dontSendNotification);
+        for (auto* knob : box.knobs)
+        {
+            knob->slider.setVisible (! synced);
+            knob->label.setVisible (! synced);
+        }
+    }
+
     for (int slot = 0; slot < ChainProcessor::numSlots; ++slot)
     {
         auto& row = rows[(size_t) slot];
@@ -269,6 +304,15 @@ void ModulationPanel::resized()
 
         if (box.shape.getNumItems() > 0)
             box.shape.setBounds (inner.removeFromTop (22));
+
+        if (box.shape.getNumItems() > 0)
+        {
+            // Sync à droite du titre ; division et tempo à la place du bouton Rate
+            box.sync.setBounds (box.bounds.withHeight (24).removeFromRight (64));
+            auto syncArea = inner.withTrimmedTop (6);
+            box.division.setBounds (syncArea.removeFromTop (24));
+            box.tempo.setBounds (syncArea.removeFromTop (20));
+        }
 
         if (! box.knobs.empty())
         {

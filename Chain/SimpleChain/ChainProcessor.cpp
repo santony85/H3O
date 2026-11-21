@@ -42,6 +42,10 @@ namespace
         for (int i = 0; i < ModulationSources::numShapes; ++i)
             shapes.add (ModulationSources::shapeName (i));
 
+        juce::StringArray divisions;
+        for (int i = 0; i < ModulationSources::numDivisions; ++i)
+            divisions.add (ModulationSources::divisionName (i));
+
         for (int l = 0; l < 2; ++l)
         {
             const juce::String n (l + 1);
@@ -50,6 +54,9 @@ namespace
                                                                      juce::AudioParameterFloatAttributes().withLabel ("Hz")));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "lfo" + n + "shape", 1 }, "LFO " + n + " Shape",
                                                                       shapes, l == 0 ? ModulationSources::sine : ModulationSources::triangle));
+            layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "lfo" + n + "sync", 1 }, "LFO " + n + " Sync", false));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "lfo" + n + "division", 1 }, "LFO " + n + " Division",
+                                                                      divisions, ModulationSources::defaultDivision));
         }
 
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "randomrate", 1 }, "Random Rate",
@@ -108,6 +115,8 @@ ChainProcessor::ChainProcessor()
     {
         lfoRate[l]  = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "rate");
         lfoShape[l] = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "shape");
+        lfoSync[l]     = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "sync");
+        lfoDivision[l] = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "division");
     }
     randomRate = parameters.getRawParameterValue ("randomrate");
     envAttack  = parameters.getRawParameterValue ("envattack");
@@ -267,6 +276,24 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     for (auto* fx : effects)
         fx->setPlayHead (playHead);
 
+    // Tempo et position du morceau, pour les LFO synchronisés
+    hostPlaying = false;
+    if (playHead != nullptr)
+        if (auto position = playHead->getPosition())
+        {
+            if (auto bpm = position->getBpm(); bpm.hasValue() && *bpm > 0.0)
+                tempo.store ((float) *bpm);
+
+            if (auto signature = position->getTimeSignature(); signature.hasValue() && signature->denominator > 0)
+                quartersPerBar = 4.0 * signature->numerator / signature->denominator;
+
+            if (auto ppq = position->getPpqPosition(); ppq.hasValue() && position->getIsPlaying())
+            {
+                blockPpq = *ppq;
+                hostPlaying = true;
+            }
+        }
+
     const auto r = getRouting();   // lu une seule fois : le même routage pour tout le bloc
     const int n = buffer.getNumSamples();
 
@@ -285,7 +312,7 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         float* channels[2] = { buffer.getWritePointer (0, start), buffer.getWritePointer (numChannels - 1, start) };
         juce::AudioBuffer<float> part (channels, numChannels, length);
 
-        updateModulation (part);
+        updateModulation (part, start);
         processRouting (r, part, midi);
     }
 
@@ -402,15 +429,27 @@ void ChainProcessor::setSlotDestination (int slot, int destination)
 }
 
 // Avance les sources et pose les décalages sur les réglages visés
-void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part)
+void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part, int startInBlock)
 {
     const int n = part.getNumSamples();
+    const double bpm = tempo.load();
 
     ModulationSources::Settings settings;
     for (int l = 0; l < 2; ++l)
     {
         settings.lfoRate[l]  = lfoRate[l]->load();
         settings.lfoShape[l] = (int) lfoShape[l]->load();
+
+        // Synchronisé : un cycle par division, au tempo du morceau
+        if (lfoSync[l]->load() >= 0.5f)
+        {
+            const double quarters = ModulationSources::divisionQuarters ((int) lfoDivision[l]->load(), quartersPerBar);
+            settings.lfoRate[l] = (float) (bpm / 60.0 / quarters);
+
+            // En lecture : la phase suit la position dans le morceau (même départ à chaque mesure, à chaque boucle)
+            if (hostPlaying)
+                sources.setLfoPhase (l, (blockPpq + startInBlock / getSampleRate() * bpm / 60.0) / quarters);
+        }
     }
     settings.randomRate = randomRate->load();
     settings.attackMs   = envAttack->load();
