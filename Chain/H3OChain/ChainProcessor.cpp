@@ -23,6 +23,7 @@ namespace
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "tremoloon", 1 }, "Tremolo On", false),
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "phaseron", 1 }, "Phaser On", false),
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "flangeron", 1 }, "Flanger On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "whammyon", 1 }, "Whammy On", false),
             // Branches parallèles A et B
             std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchbalance", 1 }, "Branch Balance",
                                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f,
@@ -136,6 +137,7 @@ ChainProcessor::ChainProcessor()
     tremoloOn    = parameters.getRawParameterValue ("tremoloon");
     phaserOn     = parameters.getRawParameterValue ("phaseron");
     flangerOn    = parameters.getRawParameterValue ("flangeron");
+    whammyOn     = parameters.getRawParameterValue ("whammyon");
 
     // Lus à travers la modulation, comme les réglages des effets
     branchBalance = chainTargets.get (parameters, "branchbalance");
@@ -175,15 +177,15 @@ ChainProcessor::ChainProcessor()
         v = 0.0f;
 
     // Même ordre que ChainRouting::Effect
-    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb, &compressor, &tremolo, &phaser, &flanger };
-    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn, compressorOn, tremoloOn, phaserOn, flangerOn };
+    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb, &compressor, &tremolo, &phaser, &flanger, &whammy };
+    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn, compressorOn, tremoloOn, phaserOn, flangerOn, whammyOn };
 
     // Tout ce que la matrice peut moduler : les réglages continus de chaque effet, puis les branches
     static const char* effectNames[] = { "Filter", "Amp", "Harmonizer", "Reverse", "Layered", "Chorus",
-                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Tremolo", "Phaser", "Flanger", "Branches & Mixers" };
+                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Tremolo", "Phaser", "Flanger", "Whammy", "Branches & Mixers" };
     std::array<ModTargets*, ChainRouting::numEffects + 1> targetLists {
         &filter.modulation, &amp.modulation, &harmonizer.modulation, &reverse.modulation, &layered.modulation,
-        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &compressor.modulation, &tremolo.modulation, &phaser.modulation, &flanger.modulation, &chainTargets
+        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &compressor.modulation, &tremolo.modulation, &phaser.modulation, &flanger.modulation, &whammy.modulation, &chainTargets
     };
 
     for (int e = 0; e <= ChainRouting::numEffects; ++e)
@@ -228,12 +230,13 @@ ChainProcessor::ChainProcessor()
     tremolo.input.setInsideChain();
     phaser.input.setInsideChain();
     flanger.input.setInsideChain();
+    whammy.input.setInsideChain();
 }
 
 const char* ChainProcessor::onParamId (int id)
 {
     static const char* ids[] = { "filteron", "ampon", "harmonizeron", "reverseon", "layeredon",
-                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon", "compressoron", "tremoloon", "phaseron", "flangeron" };
+                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon", "compressoron", "tremoloon", "phaseron", "flangeron", "whammyon" };
     return ids[juce::jlimit (0, ChainRouting::numEffects - 1, id)];
 }
 
@@ -848,7 +851,7 @@ juce::ValueTree ChainProcessor::createState()
     juce::ValueTree state ("SIMPLE_CHAIN");
     state.appendChild (parameters.copyState(), nullptr);
 
-    juce::MemoryBlock filterState, ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState, compressorState, tremoloState, phaserState, flangerState;
+    juce::MemoryBlock filterState, ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState, compressorState, tremoloState, phaserState, flangerState, whammyState;
     filter.getStateInformation (filterState);
     amp.getStateInformation (ampState);
     harmonizer.getStateInformation (harmonizerState);
@@ -863,6 +866,7 @@ juce::ValueTree ChainProcessor::createState()
     tremolo.getStateInformation (tremoloState);
     phaser.getStateInformation (phaserState);
     flanger.getStateInformation (flangerState);
+    whammy.getStateInformation (whammyState);
 
     state.setProperty ("harmonizer", harmonizerState.toBase64Encoding(), nullptr);
     state.setProperty ("filter", filterState.toBase64Encoding(), nullptr);
@@ -878,6 +882,7 @@ juce::ValueTree ChainProcessor::createState()
     state.setProperty ("tremolo", tremoloState.toBase64Encoding(), nullptr);
     state.setProperty ("phaser", phaserState.toBase64Encoding(), nullptr);
     state.setProperty ("flanger", flangerState.toBase64Encoding(), nullptr);
+    state.setProperty ("whammy", whammyState.toBase64Encoding(), nullptr);
 
     state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
     state.setProperty ("patch", juce::String (getPatch().toString()), nullptr);
@@ -953,6 +958,7 @@ bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
     restore ("tremolo", tremolo);         // absent des anciennes sessions : réglages d'usine (et éteint)
     restore ("phaser", phaser);           // absent des anciennes sessions : réglages d'usine (et éteint)
     restore ("flanger", flanger);         // absent des anciennes sessions : réglages d'usine (et éteint)
+    restore ("whammy", whammy);           // absent des anciennes sessions : réglages d'usine (et éteint)
 
     // Absent des anciennes sessions : tout en série, dans l'ordre d'origine
     // (sans prévenir l'hôte : charger une session ne la modifie pas)

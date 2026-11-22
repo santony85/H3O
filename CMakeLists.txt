@@ -172,6 +172,15 @@ set(FLANGER_SOURCES
     ${EFFECTS_DIR}/Flanger/FlangerEditor.h
     ${EFFECTS_DIR}/Flanger/FlangerEditor.cpp)
 
+set(WHAMMY_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/Harmonizer/PitchShifter.h
+    ${EFFECTS_DIR}/Whammy/WhammyEngine.h
+    ${EFFECTS_DIR}/Whammy/WhammyProcessor.h
+    ${EFFECTS_DIR}/Whammy/WhammyProcessor.cpp
+    ${EFFECTS_DIR}/Whammy/WhammyEditor.h
+    ${EFFECTS_DIR}/Whammy/WhammyEditor.cpp)
+
 set(SWEPTFILTER_SOURCES
     ${COMMON_SOURCES}
     ${EFFECTS_DIR}/SweptFilter/SweptFilterEngine.h
@@ -221,6 +230,7 @@ add_subdirectory(Plugins/H3OCompressor)
 add_subdirectory(Plugins/H3OTremolo)
 add_subdirectory(Plugins/H3OPhaser)
 add_subdirectory(Plugins/H3OFlanger)
+add_subdirectory(Plugins/H3OWhammy)
 add_subdirectory(Chain/H3OChain)
 
 #==============================================================================
@@ -257,6 +267,13 @@ target_compile_features(PhaserTest PRIVATE cxx_std_17)
 add_executable(FlangerTest Tests/FlangerTest.cpp)
 target_include_directories(FlangerTest PRIVATE ${EFFECTS_DIR}/Flanger)
 target_compile_features(FlangerTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du whammy, sans JUCE : cible WhammyTest
+#==============================================================================
+add_executable(WhammyTest Tests/WhammyTest.cpp)
+target_include_directories(WhammyTest PRIVATE ${EFFECTS_DIR})
+target_compile_features(WhammyTest PRIVATE cxx_std_17)
 
 #==============================================================================
 # Test du chorus, sans JUCE : cible ChorusTest
@@ -333,7 +350,7 @@ juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
     Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ChainEditorPatch.cpp Chain/H3OChain/MixerPanel.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp Chain/H3OChain/FactoryPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES} ${FLANGER_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES} ${FLANGER_SOURCES} ${WHAMMY_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/H3OChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
@@ -346,7 +363,7 @@ juce_add_console_app(ChainTest PRODUCT_NAME "ChainTest")
 target_sources(ChainTest PRIVATE Tests/ChainTest.cpp
     Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ChainEditorPatch.cpp Chain/H3OChain/MixerPanel.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp Chain/H3OChain/FactoryPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES} ${FLANGER_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES} ${FLANGER_SOURCES} ${WHAMMY_SOURCES})
 target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/H3OChain)
 target_compile_definitions(ChainTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(ChainTest)

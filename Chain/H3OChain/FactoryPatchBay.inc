@@ -112,7 +112,7 @@
             if (! plan.live[(size_t) mixerNode (m)])
                 parked.push_back (mixerNode (m));
         for (size_t i = 0; i < parked.size(); ++i)
-            patch.position[(size_t) parked[i]] = { ((float) i + 0.5f) / (float) parked.size(), 0.0f };
+            patch.position[(size_t) parked[i]] = { ((float) i + 0.5f) / (float) parked.size(), Patch::parkedRow ((int) i, (int) parked.size()) };
 
         chain.setPatch (patch);
         return {};

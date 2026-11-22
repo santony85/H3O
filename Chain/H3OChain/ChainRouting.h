@@ -18,18 +18,19 @@
 // En C++ pur, sans JUCE, pour pouvoir le tester seul.
 namespace ChainRouting
 {
-    constexpr int numEffects = 14;
+    constexpr int numEffects = 15;
 
     // Les identifiants des effets : leur ordre d'origine dans la chaîne.
     // Ne jamais changer l'ordre ni les noms : ils sont enregistrés dans les sessions.
-    // (le compresseur, le trémolo, le phaser et le flanger, arrivés plus tard, ont les derniers identifiants mais se placent
-    //  à leur place naturelle : le compresseur en tête, le phaser et le flanger avant le chorus, le trémolo avant le délai)
-    enum Effect : std::uint8_t { filter, amp, harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb, compressor, tremolo, phaser, flanger };
+    // (le compresseur, le trémolo, le phaser, le flanger et le whammy, arrivés plus tard, ont les derniers identifiants mais
+    //  se placent à leur place naturelle : le compresseur puis le whammy en tête, le phaser et le flanger avant le chorus,
+    //  le trémolo avant le délai)
+    enum Effect : std::uint8_t { filter, amp, harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb, compressor, tremolo, phaser, flanger, whammy };
 
     inline const std::array<const char*, numEffects>& keys()
     {
         static const std::array<const char*, numEffects> k {
-            "filter", "amp", "harmonizer", "reverse", "layered", "chorus", "delay", "banddelay", "ultratap", "reverb", "compressor", "tremolo", "phaser", "flanger"
+            "filter", "amp", "harmonizer", "reverse", "layered", "chorus", "delay", "banddelay", "ultratap", "reverb", "compressor", "tremolo", "phaser", "flanger", "whammy"
         };
         return k;
     }
@@ -51,7 +52,7 @@ namespace ChainRouting
         static Routing series()
         {
             static constexpr std::uint8_t signalOrder[numEffects] {
-                compressor, filter, amp, harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap, reverb
+                compressor, whammy, filter, amp, harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap, reverb
             };
             Routing r;
             for (int i = 0; i < numEffects; ++i)
@@ -124,12 +125,12 @@ namespace ChainRouting
             rebuildOrder (lanes);
         }
 
-        // Tient dans 64 bits : l'ordre codé comme une permutation (code de Lehmer : 14! < 2^37, sur 40 bits),
-        // puis le nombre d'effets dans Avant, A et B (5 bits chacun, à partir du bit 40), et un bit de validité (le 63e) :
+        // Tient dans 64 bits : l'ordre codé comme une permutation (code de Lehmer : 15! < 2^41, sur 44 bits),
+        // puis le nombre d'effets dans Avant, A et B (5 bits chacun, à partir du bit 44), et un bit de validité (le 63e) :
         // 0 n'est jamais un routage.
         // L'ordre étant rangé section par section, les sections se déduisent de ces nombres.
         // Permet de le passer au fil audio dans un seul std::atomic<uint64_t>.
-        static constexpr int countShift = 40, countBits = 5;
+        static constexpr int countShift = 44, countBits = 5;
         static constexpr std::uint64_t validBit = std::uint64_t (1) << 63;
 
         static constexpr std::uint64_t permutations()
@@ -318,20 +319,20 @@ namespace ChainRouting
               Routing::series() },
             // Les hauteurs d'un côté, les échos de l'autre : chacun garde sa netteté
             { "Pitch | Delays",
-              make ({ compressor, filter, amp }, { harmonizer, reverse, layered }, { phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
+              make ({ compressor, whammy, filter, amp }, { harmonizer, reverse, layered }, { phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
             // Le son sec garde son attaque, les effets s'ajoutent à côté
             { "Dry | Effects",
-              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
+              make ({ compressor, whammy, filter, amp }, {}, { harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
             // Échos et réverbération en parallèle : la réverbe ne brouille pas les répétitions
             { "Delays | Reverb",
-              make ({ compressor, filter, amp, harmonizer, reverse, layered, phaser, flanger, chorus, tremolo }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
+              make ({ compressor, whammy, filter, amp, harmonizer, reverse, layered, phaser, flanger, chorus, tremolo }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
             // Le rack de Bob Bradshaw : le son sec de l'ampli au centre, les effets à 100 % autour.
             // Choisi dans le menu, il allume aussi « Wet Only » (branche B sans son sec)
             { "Wet/Dry/Wet",
-              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap, reverb }, {}) },
+              make ({ compressor, whammy, filter, amp }, {}, { harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap, reverb }, {}) },
             // Deux harmonies différentes, une à gauche et une à droite (avec Spread)
             { "Harmonizer | Layered",
-              make ({ compressor, filter, amp }, { harmonizer, phaser, flanger, chorus }, { layered, reverse }, { tremolo, delay, bandDelay, ultraTap, reverb }) },
+              make ({ compressor, whammy, filter, amp }, { harmonizer, phaser, flanger, chorus }, { layered, reverse }, { tremolo, delay, bandDelay, ultraTap, reverb }) },
         };
         return list;
     }

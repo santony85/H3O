@@ -161,6 +161,9 @@ namespace ChainPatch
             return p;
         }
 
+        // Rangées en haut : une pédale sur deux un peu plus bas quand elles sont nombreuses (les jacks ne se touchent pas)
+        static float parkedRow (int index, int count) { return count > 11 && index % 2 == 1 ? 0.18f : 0.0f; }
+
         // Une baie sans câble : les pédales rangées en haut (dans l'ordre de la série), les mélangeurs en bas
         static Patch defaultLayout()
         {
@@ -169,7 +172,7 @@ namespace ChainPatch
             p.position[(size_t) outputNode] = { 1.0f, 0.55f };
             const auto order = ChainRouting::Routing::series().order;
             for (int i = 0; i < numEffects; ++i)
-                p.position[order[(size_t) i]] = { (float) i / (float) (numEffects - 1), 0.0f };
+                p.position[order[(size_t) i]] = { (float) i / (float) (numEffects - 1), parkedRow (i, numEffects) };
             for (int m = 0; m < numMixers; ++m)
                 p.position[(size_t) mixerNode (m)] = { 0.55f + 0.15f * (float) m, 1.0f };
             return p;

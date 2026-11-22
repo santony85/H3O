@@ -14,6 +14,7 @@
 #include "Tremolo/TremoloProcessor.h"
 #include "Phaser/PhaserProcessor.h"
 #include "Flanger/FlangerProcessor.h"
+#include "Whammy/WhammyProcessor.h"
 #include "Reverb/ReverbProcessor.h"
 #include "ChainRouting.h"
 #include "ChainPatch.h"
@@ -81,6 +82,7 @@ public:
     TremoloProcessor tremolo;
     PhaserProcessor phaser;
     FlangerProcessor flanger;
+    WhammyProcessor whammy;
 
     bool isFilterOn() const noexcept     { return filterOn->load() >= 0.5f; }
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
@@ -213,6 +215,7 @@ private:
     std::atomic<float>* tremoloOn = nullptr;
     std::atomic<float>* phaserOn = nullptr;
     std::atomic<float>* flangerOn = nullptr;
+    std::atomic<float>* whammyOn = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainProcessor)
 };

@@ -11,6 +11,7 @@
 #include "Tremolo/TremoloEditor.h"
 #include "Phaser/PhaserEditor.h"
 #include "Flanger/FlangerEditor.h"
+#include "Whammy/WhammyEditor.h"
 
 #include <cstdio>
 
@@ -78,6 +79,13 @@ int main (int argc, char** argv)
         FlangerProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("Flanger.png"));
+    }
+
+    {
+        WhammyProcessor fx;
+        fx.setCurrentProgram (6);
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("Whammy.png"));
     }
 
     {

@@ -1060,7 +1060,7 @@ namespace
             const auto r = make (lanes[0], lanes[1], lanes[2], lanes[3]);
             roundTrip = roundTrip && Routing::unpack (r.pack()) == r;
         }
-        check (roundTrip, "14 effets : 2000 routages au hasard, codés puis relus à l'identique");
+        check (roundTrip, "toutes les permutations : 2000 routages au hasard, codés puis relus à l'identique");
 
         ChainProcessor chain;
         onlyOn (chain, { flanger });
@@ -1102,6 +1102,62 @@ namespace
         reopened.setStateInformation (session.getData(), (int) session.getSize());
         check (std::abs (reopened.flanger.parameters.getRawParameterValue ("feedback")->load() + 60.0f) < 0.05f
                && reopened.isEffectOn (flanger), "la session retrouve le flanger et ses réglages");
+    }
+
+    void whammyInChain()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Whammy dans la chaîne ---\n");
+
+        const auto s = Routing::series();
+        const auto pre0 = s.effectsIn (pre);
+        const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
+        check (at (compressor) == 0 && at (whammy) == 1 && at (filter) == 2, "en série : Compressor → Whammy → Filter");
+        check (Routing::unpack (s.pack()) == s, "15 effets : le routage tient dans 64 bits");
+
+        ChainProcessor chain;
+        onlyOn (chain, { whammy });
+        auto set = [&chain] (const char* id, float value)
+        {
+            auto* param = chain.whammy.parameters.getParameter (id);
+            param->setValueNotifyingHost (param->convertTo0to1 (value));
+        };
+        set ("toe", 12.0f);
+        set ("pedal", 100.0f);
+        set ("glide", 0.0f);
+        chain.prepareToPlay (48000.0, 512);
+
+        // 220 Hz pédale enfoncée : 440 Hz en sortie (passages à zéro sur la dernière seconde)
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        int crossings = 0;
+        float previous = 0.0f;
+        for (int block = 0; block < 188; ++block)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 512; ++i)
+                    buffer.setSample (ch, i, 0.5f * std::sin (2.0f * 3.14159265f * 220.0f * (float) (block * 512 + i) / 48000.0f));
+            chain.processBlock (buffer, midi);
+            if (block >= 94)
+                for (int i = 0; i < 512; ++i)
+                {
+                    const float v = buffer.getSample (0, i);
+                    crossings += previous < 0.0f && v >= 0.0f ? 1 : 0;
+                    previous = v;
+                }
+        }
+        const double hz = crossings * 48000.0 / (94.0 * 512.0);
+        std::printf ("  220 Hz → %.0f Hz\n", hz);
+        check (std::abs (hz - 440.0) < 6.0, "le whammy transpose d'une octave, pédale enfoncée");
+
+        set ("heel", -5.0f);
+        juce::MemoryBlock session;
+        chain.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (std::abs (reopened.whammy.parameters.getRawParameterValue ("heel")->load() + 5.0f) < 0.05f
+               && reopened.isEffectOn (whammy), "la session retrouve le whammy et ses réglages");
+        check (chain.findDestination ("whammy/pedal") >= 0, "la pédale du whammy est modulable");
     }
 
     // La baie de brassage : câbles libres, mélangeurs, boucles, sessions
@@ -1425,6 +1481,7 @@ int main (int argc, char** argv)
     tremoloInChain();
     phaserInChain();
     flangerInChain();
+    whammyInChain();
     patchBay();
     factoryPresets();
 
