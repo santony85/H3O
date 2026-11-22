@@ -1,5 +1,7 @@
 # Dossiers de compilation (régénérés par CMake)
+build
 build/
+build.noindex/
 build-*/
 
 # macOS et Xcode
