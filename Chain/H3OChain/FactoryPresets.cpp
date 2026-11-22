@@ -14,6 +14,7 @@ namespace
         int program = -1;            // preset d'usine de l'effet, -1 : ses réglages par défaut
         std::vector<P> params {};    // retouches après le preset d'usine
         Lane lane = pre;
+        bool off = false;            // réglé et placé dans le routage, mais coupé : il attend sur l'étagère OFF
     };
 
     struct Mod { ModulationSources::Source source; const char* destination; float amount; };
@@ -59,6 +60,9 @@ namespace
     Fx inA   (Effect e, int program = -1, std::vector<P> p = {}) { return { e, program, std::move (p), branchA }; }
     Fx inB   (Effect e, int program = -1, std::vector<P> p = {}) { return { e, program, std::move (p), branchB }; }
     Fx after (Effect e, int program = -1, std::vector<P> p = {}) { return { e, program, std::move (p), post }; }
+
+    // Une pédale en attente : prête à sa place, coupée ; on l'allume en jouant (solo, boost, pont…)
+    Fx standby (Fx fx) { fx.off = true; return fx; }
 
     // Deux branches : balance (0 = tout A, 100 = tout B), écart stéréo (A à gauche, B à droite), réinjection croisée
     std::vector<P> split (float balance, float spread, float cross = 0.0f)
@@ -974,7 +978,7 @@ namespace
               { { whammy, 3 }, inA (delay, 5, { { "mix", 30 } }), inB (reverb, 0, { { "mix", 30 } }) },
               split (50, 60) + lfoSync (1, bar1, sawDown),
               { { lfo1, "whammy/pedal", 100 } } },
-            { "Whammy", "Octave Trill (Sync 1/16)",
+            { "Whammy", "Octave Trill (Sync 16ths)",
               { { whammy, 0, { { "glide", 5 } } }, inA (delay, 9, { { "mix", 20 } }), inB (chorus, 0, { { "mix", 30 } }), after (reverb, 2, { { "mix", 15 } }) },
               split (50, 60) + lfoSync (1, l16, square),
               { { lfo1, "whammy/pedal", 100 } } },
@@ -1007,6 +1011,60 @@ namespace
             { "Whammy", "Octave Up Shimmer",
               { { whammy, 8, { { "mix", 40 } } }, inA (reverb, 6, { { "mix", 60 } }), inB (delay, 5, { { "mix", 30 } }) },
               split (50, 80) },
+
+            //==================================================================
+            // Pedalboards : des pédales en attente sur l'étagère OFF, réglées et placées, à allumer en jouant
+            { "Pedalboards", "Blues Club Board",
+              { { compressor, 0 }, standby ({ filter, 0 }), standby ({ whammy, 4 }),
+                inA (delay, 4, { { "mix", 20 } }), inB (reverb, 0, { { "mix", 15 } }), standby (after (tremolo, 0)) },
+              split (50, 60) },
+            { "Pedalboards", "Country Stage Board",
+              { { compressor, 1 }, { chorus, 2, { { "mix", 15 } } }, standby ({ whammy, 5 }),
+                inA (delay, 2, { { "mix", 20 } }), inB (reverb, 1, { { "mix", 12 } }), standby (after (tremolo, 1)) },
+              split (50, 60) },
+            { "Pedalboards", "Funk Rhythm Board",
+              { { compressor, 2 }, { filter, 0, { { "mix", 55 } } }, standby ({ whammy, 9 }), standby ({ phaser, 0 }),
+                standby (inA (delay, 6, { { "mix", 20 } })), inB (reverb, 1, { { "mix", 10 } }) },
+              split (50, 60) },
+            { "Pedalboards", "Classic Rock Lead Board",
+              { { compressor, 5 }, standby ({ phaser, 0 }), standby ({ flanger, 0, { { "feedback", 40 }, { "mix", 40 } } }),
+                standby ({ harmonizer, -1, diatonic (A, naturalMinor, 2, 0, 45, 0) }),
+                inA (delay, 5, { { "mix", 20 } }), inB (reverb, 2, { { "mix", 15 } }) },
+              split (50, 60) },
+            { "Pedalboards", "Ambient Swell Board",
+              { { compressor, 7 }, standby ({ reverse, 5 }), standby ({ layered, 0 }),
+                inA (delay, 9, { { "mix", 30 } }), standby (inA (ultraTap, 0, { { "mix", 30 } })), inB (reverb, 6, { { "mix", 50 } }) },
+              split (50, 80) },
+            { "Pedalboards", "Worship Pad Board",
+              { { compressor, 0 }, standby ({ whammy, 8, { { "mix", 40 } } }), standby ({ chorus, 0, { { "mix", 30 } } }),
+                inA (delay, 9, { { "mix", 30 } }), inB (reverb, 4, { { "mix", 30 } }), standby (after (tremolo, 6)) },
+              split (50, 60) },
+            { "Pedalboards", "Shoegaze Board",
+              { { chorus, 0, { { "mix", 30 } } }, standby ({ flanger, 1 }), standby ({ reverse, 5 }),
+                standby (inA (bandDelay, 3, { { "mix", 30 } })), inB (reverb, 6, { { "mix", 40 } }) },
+              split (50, 60) },
+            { "Pedalboards", "Metal Rhythm & Lead Board",
+              { { compressor, 5 }, standby ({ whammy, 3 }),
+                standby ({ harmonizer, -1, diatonic (E, naturalMinor, 2, 4, 45) }),
+                standby (inA (delay, 5, { { "mix", 25 } })), inB (reverb, 0, { { "mix", 10 } }) },
+              split (50, 60) },
+            { "Pedalboards", "Surf Board",
+              { { compressor, 0 }, standby ({ tremolo, 2 }), standby ({ flanger, 6 }),
+                standby (inA (delay, 2, { { "mix", 25 } })), inB (reverb, 3, { { "mix", 35 } }) },
+              split (50, 60) },
+            { "Pedalboards", "Psych Jam Board",
+              { { phaser, 1 }, standby ({ filter, 1, { { "mix", 55 } } }), standby ({ whammy, 7 }),
+                after (delay, 7, { { "mix", 25 } }), standby (after (ultraTap, 1, { { "mix", 25 } })), after (reverb, 2, { { "mix", 20 } }) },
+              lfo (1, 0.2f, triangle),
+              { { lfo1, "whammy/pedal", 60 } } },
+            { "Pedalboards", "Wet-Dry-Wet Studio Board",
+              { standby ({ compressor, 1 }), inB (delay, 6), inB (reverb, 4), standby (inB (chorus, 2)) },
+              wetDryWet (30) },
+            { "Pedalboards", "Ballad Harmony Board",
+              { { compressor, 0 }, standby ({ tremolo, 0 }),
+                standby (inA (harmonizer, -1, diatonic (G, major, 2, 0, 100, 0))), inB (chorus, 2, { { "mix", 25 } }),
+                after (delay, 5, { { "mix", 25 } }), after (reverb, 4, { { "mix", 25 } }) },
+              split (50, 70) },
         };
         return list;
     }
@@ -1052,6 +1110,15 @@ namespace FactoryPresets
     juce::String category (int index) { return entries()[(size_t) index].recipe->category; }
     juce::String name (int index)     { return entries()[(size_t) index].recipe->name; }
 
+    std::vector<int> standbyEffects (int index)
+    {
+        std::vector<int> list;
+        for (auto& fx : entries()[(size_t) index].recipe->effects)
+            if (fx.off)
+                list.push_back (fx.effect);
+        return list;
+    }
+
     juce::String apply (int index, ChainProcessor& chain)
     {
         const auto& recipe = *entries()[(size_t) index].recipe;
@@ -1062,9 +1129,13 @@ namespace FactoryPresets
         for (auto& fx : recipe.effects)
             used[fx.effect] = true;
 
+        std::array<bool, numEffects> on = used;
+        for (auto& fx : recipe.effects)
+            on[fx.effect] = ! fx.off;
+
         for (int e = 0; e < numEffects; ++e)
             if (e != amp)
-                chain.parameters.getParameter (ChainProcessor::onParamId (e))->setValueNotifyingHost (used[(size_t) e] ? 1.0f : 0.0f);
+                chain.parameters.getParameter (ChainProcessor::onParamId (e))->setValueNotifyingHost (on[(size_t) e] ? 1.0f : 0.0f);
 
         for (auto& fx : recipe.effects)
         {

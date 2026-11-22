@@ -767,7 +767,12 @@ namespace
         int h3000 = 0;
         for (int i = 0; i < FactoryPresets::count(); ++i)
             h3000 += FactoryPresets::bank (i) == FactoryPresets::folderName ? 1 : 0;
-        check (h3000 == 100 && FactoryPresets::count() == 286, "100 presets H3000 Inspired + 124 Multi-FX + 62 Patch Bay");
+        check (h3000 == 100 && FactoryPresets::count() == 298, "100 presets H3000 Inspired + 136 Multi-FX + 62 Patch Bay");
+
+        bool slashFree = true;
+        for (int i = 0; i < FactoryPresets::count(); ++i)
+            slashFree = slashFree && ! FactoryPresets::name (i).containsChar ('/') && ! FactoryPresets::category (i).containsChar ('/');
+        check (slashFree, "pas de « / » dans les noms (il créerait un sous-dossier)");
 
         juce::StringArray paths;
         for (int i = 0; i < FactoryPresets::count(); ++i)
@@ -786,7 +791,7 @@ namespace
         ChainProcessor chain;
         chain.presets.setFolder (folder);
         const auto files = chain.presets.list();
-        check (files.size() == 286, "286 fichiers, sous-dossiers compris");
+        check (files.size() == 298, "298 fichiers, sous-dossiers compris");
 
         // Ton Amp reste : allumé, avec son état (modèle, IR)
         setParam (chain, "ampon", 1.0f);
@@ -798,7 +803,7 @@ namespace
         check (chain.presetName.startsWith (juce::String (FactoryPresets::folderName) + "/") && chain.presets.current() == files[0],
                "le nom du preset est son chemin (catégorie comprise)");
         check (chain.presets.neighbour (1) == files[1] && chain.presets.neighbour (-1) == files.getLast(), "précédent / suivant à travers les catégories");
-        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 286,
+        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 298,
                "Save réenregistre le preset dans son sous-dossier");
         check (chain.presets.saveTo (folder.getParentDirectory().getChildFile ("x.scpreset")).isNotEmpty(), "pas d'écriture hors du dossier");
 
@@ -887,6 +892,46 @@ namespace
         }
         std::printf ("  niveaux de %+.1f à %+.1f dB par rapport au son sec\n", lowest, highest);
         check (bad == 0, "aucun preset ne sature ni ne s'éteint");
+
+        // Pedalboards : les pédales en attente sont coupées mais placées ; allumées, le niveau reste raisonnable
+        int boards = 0, badBoards = 0;
+        for (int i = 0; i < FactoryPresets::count(); ++i)
+        {
+            const auto standby = FactoryPresets::standbyEffects (i);
+            if (standby.empty())
+                continue;
+            ++boards;
+
+            for (auto pedal : standby)
+            {
+                ChainProcessor fx;
+                FactoryPresets::apply (i, fx);
+                bool allOff = true;
+                for (auto e : standby)
+                    allOff = allOff && ! fx.isEffectOn (e);
+                setParam (fx, ChainProcessor::onParamId (pedal), 1.0f);   // une pédale à la fois, comme en jouant
+
+                fx.prepareToPlay (rate, block);
+                juce::AudioBuffer<float> out (input);
+                juce::MidiBuffer midi;
+                for (int start = 0; start < total; start += block)
+                {
+                    juce::AudioBuffer<float> part (out.getArrayOfWritePointers(), 2, start, juce::jmin (block, total - start));
+                    fx.processBlock (part, midi);
+                }
+                const float peak = out.getMagnitude (0, total);
+                const float gain = juce::Decibels::gainToDecibels (0.5f * (out.getRMSLevel (0, 0, total) + out.getRMSLevel (1, 0, total)) / inputRms);
+                if (std::getenv ("H3O_LEVELS") != nullptr)
+                    std::printf ("  %-40s + %-12s %+.1f dB\n", FactoryPresets::name (i).toRawUTF8(), ChainProcessor::onParamId (pedal), gain);
+                if (! allOff || ! std::isfinite (peak) || peak > 1.5f || gain < -12.0f || gain > 6.0f)
+                {
+                    ++badBoards;
+                    std::printf ("  pedalboard hors limites : %-35s + %-12s coupées %d, crête %.2f, niveau %+.1f dB\n",
+                                 FactoryPresets::name (i).toRawUTF8(), ChainProcessor::onParamId (pedal), allOff ? 1 : 0, peak, gain);
+                }
+            }
+        }
+        check (boards == 12 && badBoards == 0, "12 Pedalboards : pédales en attente coupées, chacune à un niveau raisonnable une fois allumée");
         folder.deleteRecursively();
     }
 

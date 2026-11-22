@@ -11,7 +11,7 @@ class ChainProcessor;
 namespace FactoryPresets
 {
     static constexpr const char* folderName = "H3000 Inspired";
-    static constexpr const char* multiFolderName = "Multi-FX";   // 124 rigs multi-effets, classiques et originaux, par style
+    static constexpr const char* multiFolderName = "Multi-FX";   // 136 rigs multi-effets, classiques et originaux, par style (dont 12 Pedalboards)
     static constexpr const char* patchFolderName = "Patch Bay";  // 62 rigs câblés : splits à plusieurs niveaux, mixeurs, boucles
 
     int count();
@@ -21,6 +21,9 @@ namespace FactoryPresets
 
     // Applique la recette à une chaîne neuve (tous les réglages d'usine). Renvoie une erreur, ou rien.
     juce::String apply (int index, ChainProcessor&);
+
+    // Les pédales en attente d'un preset : réglées et placées dans le routage, mais coupées (étagère OFF)
+    std::vector<int> standbyEffects (int index);
 
     // Écrit les presets dans <dossier>/<Banque>/<Catégorie>/<Nom>.scpreset. Renvoie une erreur, ou rien.
     juce::String writeAll (const juce::File& presetsFolder);
