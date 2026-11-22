@@ -1,6 +1,7 @@
 // Enregistre une image PNG de chaque interface, pour la vérifier sans ouvrir Logic.
 //   ./EditorSnapshot <dossier>        Cible Xcode : EditorSnapshot
 #include "ChainProcessor.h"
+#include "FactoryPresets.h"
 #include "BandDelay/BandDelayEditor.h"
 #include "UltraTap/UltraTapEditor.h"
 #include "Reverb/ReverbEditor.h"
@@ -151,6 +152,18 @@ int main (int argc, char** argv)
         std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
         save (*editor, folder.getChildFile ("PatchBay.png"));
     }
+
+    // Quelques presets « Patch Bay » : le rangement automatique des pédales
+    for (auto* wanted : { "Cross-Coupled Echoes", "Diamond", "Glass Cathedral", "Octave Choir" })
+        for (int i = 0; i < FactoryPresets::count(); ++i)
+            if (FactoryPresets::name (i) == wanted)
+            {
+                ChainProcessor chain;
+                chain.prepareToPlay (48000.0, 512);
+                FactoryPresets::apply (i, chain);
+                std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
+                save (*editor, folder.getChildFile ("Rig-" + juce::String (wanted).removeCharacters (" '") + ".png"));
+            }
 
     // Les routages tout prêts : le schéma avec ses branches
     const auto& templates = ChainRouting::templates();

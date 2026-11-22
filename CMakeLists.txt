@@ -315,7 +315,7 @@ target_compile_features(BandDelayTest PRIVATE cxx_std_17)
 #==============================================================================
 juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
-    Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ChainEditorPatch.cpp Chain/H3OChain/MixerPanel.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp
+    Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ChainEditorPatch.cpp Chain/H3OChain/MixerPanel.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp Chain/H3OChain/FactoryPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
     ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/H3OChain)

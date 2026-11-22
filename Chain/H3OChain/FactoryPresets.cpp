@@ -25,6 +25,7 @@ namespace
         std::vector<Fx> effects;     // allumés, dans l'ordre du signal ; les autres sont éteints
         std::vector<P> chain {};     // réglages de la chaîne (branches, LFO…)
         std::vector<Mod> mods {};
+        const char* cables = nullptr;   // baie de brassage : "input>amp.0 amp>delay.0 …" (port .1 = entrée B d'un mixeur)
     };
 
     // Raccourcis lisibles pour les recettes
@@ -913,7 +914,9 @@ namespace
         return list;
     }
 
-    // Les deux banques, dans l'ordre des dossiers
+#include "FactoryPatchBay.inc"
+
+    // Les banques, dans l'ordre des dossiers
     struct Entry { const char* bank; const Recipe* recipe; };
 
     const std::vector<Entry>& entries()
@@ -925,6 +928,8 @@ namespace
                 all.push_back ({ FactoryPresets::folderName, &r });
             for (auto& r : multiFx())
                 all.push_back ({ FactoryPresets::multiFolderName, &r });
+            for (auto& r : patchBay())
+                all.push_back ({ FactoryPresets::patchFolderName, &r });
             return all;
         }();
         return list;
@@ -1002,6 +1007,14 @@ namespace FactoryPresets
             return where + ": an effect is listed twice";
         chain.setRouting (make (lanes[pre], lanes[branchA], lanes[branchB], lanes[post]));
 
+        // Baie de brassage : les câbles de la recette, les pédales rangées colonne par colonne
+        if (recipe.cables != nullptr)
+        {
+            chain.setPatchMode (true);
+            if (auto error = applyCables (recipe, used, chain); error.isNotEmpty())
+                return where + ": " + error;
+        }
+
         for (auto& p : recipe.chain)
             if (auto error = setParameter (chain, where, p); error.isNotEmpty())
                 return error;
@@ -1023,7 +1036,7 @@ namespace FactoryPresets
     juce::String writeAll (const juce::File& presetsFolder)
     {
         // Seulement les dossiers d'usine : les presets de l'utilisateur ne sont pas touchés
-        for (auto* folder : { folderName, multiFolderName })
+        for (auto* folder : { folderName, multiFolderName, patchFolderName })
             presetsFolder.getChildFile (folder).deleteRecursively();
 
         for (int i = 0; i < count(); ++i)

@@ -767,7 +767,7 @@ namespace
         int h3000 = 0;
         for (int i = 0; i < FactoryPresets::count(); ++i)
             h3000 += FactoryPresets::bank (i) == FactoryPresets::folderName ? 1 : 0;
-        check (h3000 == 100 && FactoryPresets::count() == 200, "100 presets H3000 Inspired + 100 Multi-FX");
+        check (h3000 == 100 && FactoryPresets::count() == 250, "100 presets H3000 Inspired + 100 Multi-FX + 50 Patch Bay");
 
         juce::StringArray paths;
         for (int i = 0; i < FactoryPresets::count(); ++i)
@@ -786,7 +786,7 @@ namespace
         ChainProcessor chain;
         chain.presets.setFolder (folder);
         const auto files = chain.presets.list();
-        check (files.size() == 200, "200 fichiers, sous-dossiers compris");
+        check (files.size() == 250, "250 fichiers, sous-dossiers compris");
 
         // Ton Amp reste : allumé, avec son état (modèle, IR)
         setParam (chain, "ampon", 1.0f);
@@ -798,7 +798,7 @@ namespace
         check (chain.presetName.startsWith (juce::String (FactoryPresets::folderName) + "/") && chain.presets.current() == files[0],
                "le nom du preset est son chemin (catégorie comprise)");
         check (chain.presets.neighbour (1) == files[1] && chain.presets.neighbour (-1) == files.getLast(), "précédent / suivant à travers les catégories");
-        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 200,
+        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 250,
                "Save réenregistre le preset dans son sous-dossier");
         check (chain.presets.saveTo (folder.getParentDirectory().getChildFile ("x.scpreset")).isNotEmpty(), "pas d'écriture hors du dossier");
 
@@ -818,13 +818,29 @@ namespace
         }
         const float inputRms = input.getRMSLevel (0, 0, total);
 
-        int parallel = 0, modulated = 0;
+        int parallel = 0, modulated = 0, patchRigs = 0, complexRigs = 0, multiSplit = 0;
         for (auto& file : files)
         {
             ChainProcessor fx;
             fx.presets.setFolder (folder);
             fx.presets.load (file);
-            parallel += fx.getRouting().hasParallel() ? 1 : 0;
+            parallel += fx.getRouting().hasParallel() || fx.isPatchMode() ? 1 : 0;
+            if (fx.isPatchMode())
+            {
+                // Les rigs câblés : au moins deux splits (une sortie vers plusieurs entrées) et une modulation
+                std::array<int, ChainPatch::numNodes> outs {};
+                for (auto& c : fx.getPatch().cables)
+                    ++outs[c.from];
+                int splits = 0;
+                for (auto n : outs)
+                    splits += n > 1 ? 1 : 0;
+                bool modulatedRig = false;
+                for (int slot = 0; slot < ChainProcessor::numSlots; ++slot)
+                    modulatedRig = modulatedRig || fx.getSlotDestination (slot) >= 0;
+                ++patchRigs;
+                complexRigs += splits >= 1 && fx.getPatch().cables.size() >= 6 && modulatedRig ? 1 : 0;
+                multiSplit += splits >= 2 ? 1 : 0;
+            }
             for (int slot = 0; slot < ChainProcessor::numSlots; ++slot)
                 if (fx.getSlotDestination (slot) >= 0)
                 {
@@ -834,6 +850,8 @@ namespace
         }
         std::printf ("  %d presets en branches parallèles, %d avec modulation\n", parallel, modulated);
         check (parallel >= files.size() - 5, "presque tous les presets utilisent les branches A / B");
+        std::printf ("  %d rigs câblés, dont %d à plusieurs splits\n", patchRigs, multiSplit);
+        check (patchRigs == 50 && complexRigs == 50 && multiSplit >= 30, "Patch Bay : 50 rigs câblés, splits et modulations");
 
         int bad = 0;
         float lowest = 100.0f, highest = -100.0f;
@@ -1296,6 +1314,11 @@ static void dumpParameters()
             programs.add (juce::String (i) + ":" + fx.getProgramName (i));
         std::printf ("  presets: %s\n", programs.joinIntoString (", ").toRawUTF8());
     }
+
+    juce::StringArray keys;
+    for (auto& d : chain.getDestinations())
+        keys.add (d.key);
+    std::printf ("\n=== destinations de modulation\n  %s\n", keys.joinIntoString (" ").toRawUTF8());
 }
 
 int main (int argc, char** argv)
