@@ -11,8 +11,8 @@ class ChainProcessor;
 namespace FactoryPresets
 {
     static constexpr const char* folderName = "H3000 Inspired";
-    static constexpr const char* multiFolderName = "Multi-FX";   // 100 rigs multi-effets, classiques et originaux, par style
-    static constexpr const char* patchFolderName = "Patch Bay";  // 50 rigs câblés : splits à plusieurs niveaux, mixeurs, boucles
+    static constexpr const char* multiFolderName = "Multi-FX";   // 112 rigs multi-effets, classiques et originaux, par style
+    static constexpr const char* patchFolderName = "Patch Bay";  // 56 rigs câblés : splits à plusieurs niveaux, mixeurs, boucles
 
     int count();
     juce::String bank (int index);

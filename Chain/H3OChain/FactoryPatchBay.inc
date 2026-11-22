@@ -425,6 +425,45 @@
               { { lfo1, "branches/mix2pana", 50 } },
               "input>amp.0 amp>harmonizer.0 harmonizer>chorus.0 harmonizer>delay.0 chorus>mixer2.0 delay>mixer2.1 "
               "amp>mixer1.0 mixer2>mixer1.1 mixer1>reverb.0 reverb>output.0" },
+
+            //==================================================================
+            // Réseaux de flanger : le « jet » dans des chemins parallèles, des splits et des boucles
+            { "Flanger Networks", "Jet Stream Split",
+              { wet (flanger, 0), wet (delay, 9), fx (chorus, 3), fx (reverb, 3, { { "mix", 20 } }) },
+              mixer (1, 80, 60) + mixer (2, 55, 50, -60, 60) + lfo (1, 0.08f, sine),
+              { { lfo1, "flanger/manual", 20 } },
+              "input>amp.0 amp>chorus.0 amp>flanger.0 flanger>delay.0 flanger>mixer2.0 delay>mixer2.1 "
+              "chorus>mixer1.0 mixer2>mixer1.1 mixer1>reverb.0 reverb>output.0" },
+            { "Flanger Networks", "Through-Zero Feedback",
+              { wet (flanger, 1), wet (delay, 4), fx (reverb, 6, { { "mix", 25 } }) },
+              mixer (1, 100, 40) + mixer (2, 85, 55) + lfo (1, 0.1f, sine),
+              { { lfo1, "branches/mix1levelb", 15 } },
+              "input>amp.0 amp>mixer1.0 mixer1>flanger.0 flanger>delay.0 delay>mixer1.1 "
+              "amp>mixer2.0 delay>mixer2.1 mixer2>reverb.0 reverb>output.0" },
+            { "Flanger Networks", "Twin Combs",
+              { wet (flanger, 5), wet (phaser, 6), wet (reverb, 4) },
+              mixer (1, 55, 55, -70, 70) + mixer (2, 85, 60) + mixer (3, 85, 35) + lfo (1, 0.07f, triangle),
+              { { lfo1, "branches/mix1pana", 40 }, { lfo1, "branches/mix1panb", -40 } },
+              "input>amp.0 amp>flanger.0 amp>phaser.0 flanger>mixer1.0 phaser>mixer1.1 amp>mixer2.0 mixer1>mixer2.1 "
+              "mixer2>mixer3.0 mixer2>reverb.0 reverb>mixer3.1 mixer3>output.0" },
+            { "Flanger Networks", "Harmonic Jet (E Minor)",
+              { fx (harmonizer, -1, diatonic (E, naturalMinor, 2, 4, 100)), wet (flanger, 0), wet (delay, 9), fx (reverb, 0, { { "mix", 20 } }) },
+              mixer (1, 85, 55) + mixer (2, 55, 50, -60, 60),
+              { { pitch, "flanger/manual", -25 } },
+              "input>amp.0 amp>harmonizer.0 harmonizer>flanger.0 harmonizer>delay.0 flanger>mixer2.0 delay>mixer2.1 "
+              "amp>mixer1.0 mixer2>mixer1.1 mixer1>reverb.0 reverb>output.0" },
+            { "Flanger Networks", "Reverse Jet Loop",
+              { wet (reverse, 0), wet (flanger, 1), fx (reverb, 3, { { "mix", 20 } }) },
+              mixer (1, 100, 40) + mixer (2, 85, 55) + lfo (1, 0.09f, triangle),
+              { { lfo1, "reverse/length", 15 } },
+              "input>amp.0 amp>mixer1.0 mixer1>reverse.0 reverse>flanger.0 flanger>mixer1.1 "
+              "amp>mixer2.0 flanger>mixer2.1 mixer2>reverb.0 reverb>output.0" },
+            { "Flanger Networks", "Envelope Flange Funk",
+              { fx (compressor, 2), fx (filter, 1), wet (flanger, 3), wet (delay, 2) },
+              mixer (1, 75, 60, -30, 40) + mixer (2, 85, 35) + env (5, 150),
+              { { envelope, "flanger/manual", 30 } },
+              "input>compressor.0 compressor>amp.0 amp>filter.0 filter>mixer1.0 filter>flanger.0 flanger>mixer1.1 "
+              "mixer1>delay.0 mixer1>mixer2.0 delay>mixer2.1 mixer2>output.0" },
         };
         return list;
     }
