@@ -1014,6 +1014,121 @@ namespace
                && reopened.isEffectOn (phaser), "la session retrouve le phaser et ses réglages");
     }
 
+    // La baie de brassage : câbles libres, mélangeurs, boucles, sessions
+    void patchBay()
+    {
+        using namespace ChainRouting;
+        using namespace ChainPatch;
+        std::printf ("\n--- Baie de brassage ---\n");
+
+        // Le modèle
+        {
+            Patch p;
+            check (p.connect (inputNode, delay) && ! p.connect (inputNode, delay) && ! p.connect (outputNode, delay)
+                   && ! p.connect (delay, inputNode) && ! p.connect (delay, mixerNode (0), 2),
+                   "câbles : doublons et prises impossibles refusés");
+            p.connect (delay, harmonizer);
+            p.connect (harmonizer, delay);       // boucle
+            p.connect (harmonizer, outputNode);
+            p.connect (reverb, outputNode);      // la réverbe ne reçoit rien
+            p.position[(size_t) delay] = { 0.25f, 0.75f };
+            const auto plan = compile (p);
+            int delayed = 0;
+            for (int i = 0; i < plan.numLinks; ++i)
+                delayed += plan.links[(size_t) i].delayed ? 1 : 0;
+            check (plan.hasDelayed && delayed == 1 && plan.live[delay] && plan.live[harmonizer] && ! plan.live[reverb],
+                   "boucle repérée (un seul câble retardé), pédale isolée ignorée");
+            check (Patch::fromString (p.toString()) == p, "baie : texte de session relu à l'identique");
+            check (Patch::fromString ("input>unknown.0 input>delay.0 delay>output.0 | delay@0.3,0.4 bogus@1,1").cables.size() == 2,
+                   "session d'une version future : les câbles inconnus sont ignorés");
+        }
+
+        // Le routage à branches converti en câbles sonne pareil (série, puis deux branches)
+        for (int t : { 0, 1 })
+        {
+            ChainProcessor branches, cables;
+            for (auto* c : { &branches, &cables })
+            {
+                c->setRouting (templates()[(size_t) t].routing);
+                setParam (*c, "branchbalance", 30.0f);
+                setParam (*c, "choruson", 1.0f);
+            }
+            cables.setPatchMode (true);
+            const float d = maxDifference (run (branches), run (cables));
+            std::printf ("        %s : écart max %.2e\n", templates()[(size_t) t].name, d);
+            check (d < 1.0e-5f, (std::string ("converti en câbles, même son : ") + templates()[(size_t) t].name).c_str());
+        }
+
+        const auto dry = input();
+
+        // Entrée branchée directement sur la sortie : son intact ; rien de branché : silence
+        {
+            ChainProcessor chain;
+            chain.setPatchMode (true);
+            Patch p;
+            p.connect (inputNode, outputNode);
+            chain.setPatch (p);
+            check (maxDifference (run (chain), dry) < 1.0e-6f, "entrée → sortie : son intact");
+
+            chain.setPatch (Patch::defaultLayout());
+            const auto silent = run (chain);
+            check (peak (silent, 0) == 0.0f && peak (silent, 1) == 0.0f, "aucun câble vers la sortie : silence");
+        }
+
+        // Deux chemins séparés à gauche et à droite grâce à un mélangeur
+        {
+            ChainProcessor chain;
+            chain.setPatchMode (true);
+            Patch p;
+            p.connect (inputNode, mixerNode (0), 0);
+            p.connect (mixerNode (0), outputNode);
+            chain.setPatch (p);
+            setParam (chain, ChainProcessor::mixerParamId (0, "pana").toRawUTF8(), -100.0f);
+            const auto out = run (chain);
+            check (peak (out, 1) < 1.0e-6f && std::abs (peak (out, 0) - 2.0f * peak (dry, 0)) < 1.0e-3f,
+                   "mélangeur : panoramique tout à gauche");
+        }
+
+        // Une boucle avec gain : le son reste borné et ne s'emballe pas
+        {
+            ChainProcessor chain;
+            onlyOn (chain, { delay });
+            chain.setPatchMode (true);
+            Patch p;
+            p.connect (inputNode, mixerNode (1), 0);
+            p.connect (mixerNode (1), delay);
+            p.connect (delay, mixerNode (1), 1);   // retour
+            p.connect (delay, outputNode);
+            chain.setPatch (p);
+            setParam (chain, ChainProcessor::mixerParamId (1, "levelb").toRawUTF8(), 200.0f);
+            const auto out = run (chain, 400, true);
+            bool finite = true;
+            for (auto& ch : out)
+                for (auto v : ch)
+                    finite = finite && std::isfinite (v);
+            std::printf ("        crête %.2f\n", std::max (peak (out, 0), peak (out, 1)));
+            check (finite && peak (out, 0) < 10.0f, "boucle de câbles : bornée, sans emballement");
+        }
+
+        // La session garde les câbles et le mode
+        {
+            ChainProcessor chain;
+            chain.setPatchMode (true);
+            auto p = chain.getPatch();
+            p.connect (delay, mixerNode (3), 1);
+            p.position[(size_t) reverb] = { 0.33f, 0.66f };
+            chain.setPatch (p);
+            juce::MemoryBlock session;
+            chain.getStateInformation (session);
+            ChainProcessor reopened;
+            reopened.setStateInformation (session.getData(), (int) session.getSize());
+            check (reopened.isPatchMode() && reopened.getPatch() == p, "la session retrouve la baie et ses câbles");
+
+            ChainProcessor old;   // session sans baie : routage à branches
+            check (! old.isPatchMode() && old.getPatch().cables.empty(), "par défaut : routage à branches, aucun câble");
+        }
+    }
+
     void presets()
     {
         using namespace ChainRouting;
@@ -1193,6 +1308,7 @@ int main (int argc, char** argv)
     compressorInChain();
     tremoloInChain();
     phaserInChain();
+    patchBay();
     factoryPresets();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");

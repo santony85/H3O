@@ -18,6 +18,7 @@ juce_add_plugin(H3OChain
 
 audiofx_setup_plugin(H3OChain
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainRouting.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ChainPatch.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainPresets.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainPresets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ModulationSources.h
@@ -27,6 +28,9 @@ audiofx_setup_plugin(H3OChain
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainProcessor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ChainEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ChainEditorPatch.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MixerPanel.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/MixerPanel.cpp
     ${SWEPTFILTER_SOURCES}
     ${AMP_SOURCES}
     ${HARMONIZER_SOURCES}

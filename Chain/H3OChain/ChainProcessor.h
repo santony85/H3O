@@ -15,6 +15,7 @@
 #include "Phaser/PhaserProcessor.h"
 #include "Reverb/ReverbProcessor.h"
 #include "ChainRouting.h"
+#include "ChainPatch.h"
 #include "ModulationSources.h"
 #include "Common/ModTargets.h"
 #include "ChainPresets.h"
@@ -123,6 +124,14 @@ public:
     // Tempo suivi par les LFO synchronisés : celui de Logic, ou 120 BPM sans hôte (application autonome)
     float getTempo() const noexcept { return tempo.load(); }
 
+    // Baie de brassage : des câbles libres à la place des branches A / B (voir ChainPatch.h)
+    bool isPatchMode() const noexcept { return patchMode.load(); }
+    void setPatchMode (bool);                       // la première fois, le routage à branches est converti en câbles
+    ChainPatch::Patch getPatch() const;
+    void setPatch (const ChainPatch::Patch&);       // depuis l'interface : appliqué au son au bloc suivant
+    void convertRoutingToPatch();                   // remplace les câbles par la traduction du routage à branches
+    static juce::String mixerParamId (int mixer, const char* name) { return "mix" + juce::String (mixer + 1) + name; }
+
     juce::AudioProcessor& effect (int id) noexcept { return *effects[(size_t) id]; }
     bool isEffectOn (int id) const noexcept        { return onParams[(size_t) id]->load() >= 0.5f; }
     static const char* onParamId (int id);
@@ -146,6 +155,23 @@ private:
     // Gains de mélange lissés : tourner Balance ou Spread ne fait pas de clic
     std::array<juce::SmoothedValue<float>, 4> mixGains;   // A gauche, A droite, B gauche, B droite
     juce::SmoothedValue<float> feedbackGain, widthGain;
+
+    void processPatch (juce::AudioBuffer<float>&, juce::MidiBuffer&);
+    void gather (int node, int port, juce::AudioBuffer<float>& dest, int n);
+    void publishPlan (const ChainPatch::Patch&);
+
+    std::atomic<bool> patchMode { false };
+    mutable juce::CriticalSection patchLock;            // la baie modifiée par l'interface (et les sessions)
+    ChainPatch::Patch patch = ChainPatch::Patch::defaultLayout();
+    juce::SpinLock planLock;                            // passage du plan de l'interface au son, sans attente
+    ChainPatch::Plan pendingPlan, activePlan;
+    bool planPending = false;
+    std::array<juce::AudioBuffer<float>, ChainPatch::numNodes> nodeOut;   // ce qui sort de chaque prise OUT
+    std::array<int, ChainPatch::numNodes> nodeLength {};
+    juce::AudioBuffer<float> gatherA, gatherB;
+    std::array<std::atomic<float>*, ChainPatch::numMixers * 4> mixerParams {};   // niveau A, niveau B, pan A, pan B
+    std::array<float, ChainPatch::numMixers * 4> mixerGains {};                  // gains du paquet précédent (rampes)
+    bool mixerGainsReady = false;
 
     void processLane (int lane, const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);
     void processRouting (const ChainRouting::Routing&, juce::AudioBuffer<float>&, juce::MidiBuffer&);

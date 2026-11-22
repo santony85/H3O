@@ -129,6 +129,29 @@ int main (int argc, char** argv)
         save (*editor, folder.getChildFile ("Modulation.png"));
     }
 
+    // La baie de brassage : le routage « Pitch | Delays » converti en câbles, plus une boucle et une modulation
+    {
+        ChainProcessor chain;
+        chain.prepareToPlay (48000.0, 512);
+        chain.setRouting (ChainRouting::templates()[1].routing);
+        for (auto id : { "choruson", "reverbon", "phaseron" })
+            chain.parameters.getParameter (id)->setValueNotifyingHost (1.0f);
+        chain.setPatchMode (true);
+
+        auto p = chain.getPatch();
+        p.connect (ChainRouting::delay, ChainPatch::mixerNode (1), 0);           // retour du délai…
+        p.connect (ChainPatch::mixerNode (1), ChainRouting::chorus, 0);          // …dans le chorus qui le nourrit (boucle)
+        p.position[(size_t) ChainPatch::mixerNode (1)] = { 0.30f, 0.30f };
+        chain.setPatch (p);
+
+        auto* source = chain.parameters.getParameter ("mod1source");
+        source->setValueNotifyingHost (source->convertTo0to1 ((float) ModulationSources::lfo1));
+        chain.setSlotDestination (0, chain.findDestination ("delay/time"));
+
+        std::unique_ptr<juce::AudioProcessorEditor> editor (chain.createEditor());
+        save (*editor, folder.getChildFile ("PatchBay.png"));
+    }
+
     // Les routages tout prêts : le schéma avec ses branches
     const auto& templates = ChainRouting::templates();
     for (size_t i = 1; i < templates.size(); ++i)

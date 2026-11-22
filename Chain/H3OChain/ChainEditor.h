@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainProcessor.h"
 #include "ModulationPanel.h"
+#include "MixerPanel.h"
 
 // Un pédalier dessiné comme un schéma du signal :
 //
@@ -17,6 +18,10 @@
 // - Balance, Spread et Cross Feedback règlent le mélange des deux branches ;
 // - le bouton Modulation affiche la matrice de modulation (un point violet marque les pédales modulées) ;
 // - ◀ Preset ▶ : charger, enregistrer, parcourir tes presets.
+//
+// Baie de brassage (menu Routing › Patch Bay) : les mêmes pédales, posées librement, reliées par des câbles
+// (voir ChainEditorPatch.cpp) : on tire un câble d'une prise OUT vers une prise IN, d'une source de modulation
+// vers la prise MOD d'une pédale ; on reprend un câble par sa prise IN ; clic droit ou Suppr pour le retirer.
 class ChainEditor : public juce::AudioProcessorEditor,
                     private juce::Timer
 {
@@ -32,6 +37,8 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    bool keyPressed (const juce::KeyPress&) override;
 
 private:
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -114,7 +121,61 @@ private:
     juce::ToggleButton wetOnlyButton { "B Wet Only" };   // Wet/Dry/Wet : effets de B à 100 %, côte à côte
     std::unique_ptr<ButtonAttachment> wetOnlyAttachment;
     void setParameter (const juce::String& id, float value);
-    int selected = 0;   // pédale affichée, ou -1 pour la matrice de modulation
+    int selected = 0;   // pédale affichée, -1 pour la matrice de modulation, mixerSelection pour les mélangeurs
+    static constexpr int mixerSelection = -2;
+
+    //==============================================================================
+    // Baie de brassage (ChainEditorPatch.cpp)
+    struct MixerCell
+    {
+        std::unique_ptr<juce::TextButton> button;
+        juce::Rectangle<int> cell;
+    };
+
+    struct CableDrag
+    {
+        bool active = false, mod = false;
+        int from = -1;               // nœud de départ (audio) ou source de modulation
+        juce::Point<float> end;
+    };
+
+    bool patchView = false;
+    ChainPatch::Patch shownPatch;
+    std::array<MixerCell, ChainPatch::numMixers> mixers;
+    std::unique_ptr<MixerPanel> mixerPanel;
+    juce::Label patchHint;
+    int movingNode = -1;             // pédale ou mélangeur que l'on glisse
+    juce::Point<int> moveOffset;
+    CableDrag cableDrag;
+    int selectedCable = -1;          // câble audio sélectionné (index dans shownPatch.cables)
+    int hoverCable = -1, hoverMod = -1;
+    int contentHeight = 0;
+
+    int stripHeight() const { return patchView ? patchStripHeight : laneStripHeight; }
+    void setPatchView (bool);
+    void layoutPatch();
+    void commitPatch();
+    void paintPatch (juce::Graphics&);
+    void paintPatchOver (juce::Graphics&);
+    bool patchMouseDown (const juce::MouseEvent&);
+    bool patchMouseDrag (const juce::MouseEvent&);
+    bool patchMouseUp (const juce::MouseEvent&);
+    juce::Rectangle<int> nodeCell (int node) const;
+    juce::Colour nodeColour (int node) const;
+    juce::String nodeName (int node) const;
+    juce::Point<float> inJack (int node, int port) const;
+    juce::Point<float> outJack (int node) const;
+    juce::Point<float> modJack (int node) const;
+    juce::Point<float> sourceJack (int source) const;
+    juce::Path cablePath (juce::Point<float> from, juce::Point<float> to) const;
+    int nodeForComponent (const juce::Component*) const;
+    int modNodeForSlot (int slot) const;
+    int cableAt (juce::Point<float>) const;
+    int modCableAt (juce::Point<float>) const;
+    void showCableMenu (int cable);
+    void showModCableMenu (int slot);
+    void showModTargetMenu (int node, int source);
+    void showNodeMenu (int node);
 
     // Schéma : routage affiché, séparation et fusion des branches, cases des branches vides
     ChainRouting::Routing shown = ChainRouting::Routing::series();
@@ -132,7 +193,9 @@ private:
     static constexpr int rowGap         = 8;
     static constexpr int diagramHeight  = 3 * cellHeight + 2 * rowGap + 16;
     static constexpr int controlsHeight = 30;   // Balance, Spread, Cross Feedback
-    static constexpr int stripHeight    = diagramHeight + controlsHeight + 6;
+    static constexpr int laneStripHeight = diagramHeight + controlsHeight + 6;
+    static constexpr int patchDiagramHeight = 340;
+    static constexpr int patchStripHeight   = patchDiagramHeight + controlsHeight + 6;
     static constexpr int arrowWidth     = 12;
     static constexpr int splitWidth     = 22;   // place des embranchements
     static constexpr int minPedalWidth  = 68;   // de quoi lire « Harmonizer »

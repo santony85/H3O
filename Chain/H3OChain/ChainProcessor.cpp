@@ -38,6 +38,24 @@ namespace
                                                          juce::NormalisableRange<float> (0.0f, 90.0f, 0.1f), 0.0f,
                                                          juce::AudioParameterFloatAttributes().withLabel ("%")));
 
+        // Baie de brassage : les 4 mélangeurs (niveau et panoramique de chaque entrée)
+        for (int m = 0; m < ChainPatch::numMixers; ++m)
+        {
+            const juce::String n (m + 1);
+            for (auto in : { "a", "b" })
+            {
+                const juce::String upper = juce::String (in).toUpperCase();
+                layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ChainProcessor::mixerParamId (m, "level") + in, 1 },
+                                                                         "Mixer " + n + " Level " + upper,
+                                                                         juce::NormalisableRange<float> (0.0f, 200.0f, 0.1f), 100.0f,
+                                                                         juce::AudioParameterFloatAttributes().withLabel ("%")));
+                layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ChainProcessor::mixerParamId (m, "pan") + in, 1 },
+                                                                         "Mixer " + n + " Pan " + upper,
+                                                                         juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f,
+                                                                         juce::AudioParameterFloatAttributes().withLabel ("%")));
+            }
+        }
+
         // Sources de modulation
         auto rateRange = [] (float lo, float hi, float centre)
         {
@@ -124,6 +142,15 @@ ChainProcessor::ChainProcessor()
     branchWidth   = chainTargets.get (parameters, "branchwidth");
     wetOnly       = parameters.getRawParameterValue ("wetonly");
 
+    // Les mélangeurs de la baie : modulables comme les branches
+    for (int m = 0; m < ChainPatch::numMixers; ++m)
+    {
+        mixerParams[(size_t) (m * 4 + 0)] = chainTargets.get (parameters, mixerParamId (m, "levela"));
+        mixerParams[(size_t) (m * 4 + 1)] = chainTargets.get (parameters, mixerParamId (m, "levelb"));
+        mixerParams[(size_t) (m * 4 + 2)] = chainTargets.get (parameters, mixerParamId (m, "pana"));
+        mixerParams[(size_t) (m * 4 + 3)] = chainTargets.get (parameters, mixerParamId (m, "panb"));
+    }
+
     for (int l = 0; l < 2; ++l)
     {
         lfoRate[l]  = parameters.getRawParameterValue ("lfo" + juce::String (l + 1) + "rate");
@@ -151,7 +178,7 @@ ChainProcessor::ChainProcessor()
 
     // Tout ce que la matrice peut moduler : les réglages continus de chaque effet, puis les branches
     static const char* effectNames[] = { "Filter", "Amp", "Harmonizer", "Reverse", "Layered", "Chorus",
-                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Tremolo", "Phaser", "Branches" };
+                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Tremolo", "Phaser", "Branches & Mixers" };
     std::array<ModTargets*, ChainRouting::numEffects + 1> targetLists {
         &filter.modulation, &amp.modulation, &harmonizer.modulation, &reverse.modulation, &layered.modulation,
         &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &compressor.modulation, &tremolo.modulation, &phaser.modulation, &chainTargets
@@ -259,6 +286,17 @@ void ChainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     sources.prepare (sampleRate);
     monoScratch.assign ((size_t) size, 0.0f);
 
+    for (auto& b : nodeOut)
+    {
+        b.setSize (2, juce::jmax (size, ChainPatch::feedbackChunk));
+        b.clear();
+    }
+    nodeLength.fill (0);
+    gatherA.setSize (2, juce::jmax (size, ChainPatch::feedbackChunk));
+    gatherB.setSize (2, juce::jmax (size, ChainPatch::feedbackChunk));
+    mixerGainsReady = false;
+    publishPlan (getPatch());
+
     widthGain.reset (sampleRate, 0.03);
     widthGain.setCurrentAndTargetValue (branchWidth->load() * 0.01f);
     feedbackGain.reset (sampleRate, 0.03);
@@ -329,7 +367,23 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     for (int slot = 0; slot < numSlots; ++slot)
         modulating = modulating || isSlotActive (slot);
 
-    const int chunk = modulating ? 64 : n;
+    // Baie de brassage : le plan publié par l'interface (pris seulement s'il est libre, sans jamais attendre)
+    const bool patching = patchMode.load();
+    if (patching)
+    {
+        const juce::GenericScopedTryLock<juce::SpinLock> lock (planLock);
+        if (lock.isLocked() && planPending)
+        {
+            activePlan = pendingPlan;
+            planPending = false;
+            for (auto& b : nodeOut)
+                b.clear();
+            nodeLength.fill (0);
+        }
+    }
+
+    // Une boucle de câbles avance par paquets de 64 échantillons : c'est son retard
+    const int chunk = (modulating || (patching && activePlan.hasDelayed)) ? ChainPatch::feedbackChunk : n;
     const int numChannels = juce::jmin (2, buffer.getNumChannels());
 
     for (int start = 0; start < n; start += chunk)
@@ -339,7 +393,10 @@ void ChainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         juce::AudioBuffer<float> part (channels, numChannels, length);
 
         updateModulation (part, start, r);
-        processRouting (r, part, midi);
+        if (patching && numChannels >= 2)
+            processPatch (part, midi);
+        else
+            processRouting (r, part, midi);
     }
 
     for (auto* fx : effects)
@@ -487,6 +544,179 @@ void ChainProcessor::processRouting (const ChainRouting::Routing& r, juce::Audio
     processLane (ChainRouting::post, r, buffer, midi);
 }
 
+//==============================================================================
+// Baie de brassage
+
+ChainPatch::Patch ChainProcessor::getPatch() const
+{
+    const juce::ScopedLock lock (patchLock);
+    return patch;
+}
+
+void ChainProcessor::publishPlan (const ChainPatch::Patch& p)
+{
+    const auto plan = ChainPatch::compile (p);
+    const juce::SpinLock::ScopedLockType lock (planLock);
+    pendingPlan = plan;
+    planPending = true;
+}
+
+void ChainProcessor::setPatch (const ChainPatch::Patch& p)
+{
+    {
+        const juce::ScopedLock lock (patchLock);
+        if (patch == p)
+            return;
+        patch = p;
+    }
+    publishPlan (p);
+    updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+}
+
+void ChainProcessor::convertRoutingToPatch()
+{
+    // Les réglages eux-mêmes (pas les valeurs modulées, qui ne sont mises à jour qu'au bloc suivant)
+    std::array<bool, ChainRouting::numEffects> on {};
+    for (int e = 0; e < ChainRouting::numEffects; ++e)
+        on[(size_t) e] = isEffectOn (e);
+    const auto c = ChainPatch::fromRouting (getRouting(), parameters.getRawParameterValue ("branchbalance")->load(),
+                                            parameters.getRawParameterValue ("branchspread")->load(), wetOnly->load() >= 0.5f, on);
+
+    auto set = [this] (const juce::String& id, float value)
+    {
+        if (auto* param = parameters.getParameter (id))
+            param->setValueNotifyingHost (param->convertTo0to1 (value));
+    };
+    set (mixerParamId (0, "levela"), c.levelA);
+    set (mixerParamId (0, "levelb"), c.levelB);
+    set (mixerParamId (0, "pana"), c.panA);
+    set (mixerParamId (0, "panb"), c.panB);
+
+    setPatch (c.patch);
+}
+
+void ChainProcessor::setPatchMode (bool on)
+{
+    // Première fois : la baie part du routage à branches actuel, déjà câblé
+    if (on && getPatch().cables.empty())
+        convertRoutingToPatch();
+
+    if (patchMode.exchange (on) != on)
+        updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+}
+
+// Additionne dans « dest » tout ce qui arrive à une prise IN. Un câble qui revient en arrière lit le paquet précédent,
+// adouci (tanh) : une boucle ne peut pas s'emballer.
+void ChainProcessor::gather (int node, int port, juce::AudioBuffer<float>& dest, int n)
+{
+    dest.clear (0, n);
+    for (int i = 0; i < activePlan.numLinks; ++i)
+    {
+        const auto& link = activePlan.links[(size_t) i];
+        if (link.to != node || link.port != port)
+            continue;
+
+        const auto& source = nodeOut[link.from];
+        if (! link.delayed)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                dest.addFrom (ch, 0, source, ch, 0, n);
+            continue;
+        }
+
+        const int length = juce::jmin (n, nodeLength[link.from]);
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            auto* out = dest.getWritePointer (ch);
+            const auto* in = source.getReadPointer (ch);
+            for (int k = 0; k < length; ++k)
+                out[k] += std::tanh (in[k]);
+        }
+    }
+}
+
+void ChainProcessor::processPatch (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
+    using namespace ChainPatch;
+    const int n = buffer.getNumSamples();
+
+    // Normalement jamais : l'hôte ne dépasse pas la taille annoncée dans prepareToPlay
+    if (n > gatherA.getNumSamples())
+    {
+        for (auto& b : nodeOut)
+            b.setSize (2, n, true, true, true);
+        gatherA.setSize (2, n, false, false, true);
+        gatherB.setSize (2, n, false, false, true);
+    }
+
+    for (int ch = 0; ch < 2; ++ch)
+        nodeOut[inputNode].copyFrom (ch, 0, buffer, ch, 0, n);
+    nodeLength[inputNode] = n;
+
+    for (int step = 0; step < activePlan.numSteps; ++step)
+    {
+        const int node = activePlan.steps[(size_t) step];
+        auto& out = nodeOut[(size_t) node];
+
+        if (isEffect (node))
+        {
+            // L'entrée est rassemblée avant d'écrire : une pédale bouclée sur elle-même lit encore le paquet précédent
+            gather (node, 0, gatherA, n);
+            for (int ch = 0; ch < 2; ++ch)
+                out.copyFrom (ch, 0, gatherA, ch, 0, n);
+
+            if (isEffectOn (node))
+            {
+                juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, n);
+                effects[(size_t) node]->processBlock (view, midi);
+            }
+        }
+        else if (isMixer (node))
+        {
+            gather (node, 0, gatherA, n);
+            gather (node, 1, gatherB, n);
+
+            // Gains du paquet : niveau × panoramique (comme Spread : −100 % = tout à gauche, à double niveau)
+            const int m = node - numEffects;
+            float target[4];
+            for (int in = 0; in < 2; ++in)
+            {
+                const float level = mixerParams[(size_t) (m * 4 + in)]->load() * 0.01f;
+                const float pan   = juce::jlimit (-1.0f, 1.0f, mixerParams[(size_t) (m * 4 + 2 + in)]->load() * 0.01f);
+                target[in * 2]     = level * (1.0f - pan);   // gauche
+                target[in * 2 + 1] = level * (1.0f + pan);   // droite
+            }
+
+            auto* gains = &mixerGains[(size_t) (m * 4)];
+            if (! mixerGainsReady)
+                std::copy (target, target + 4, gains);
+
+            auto* outL = out.getWritePointer (0);
+            auto* outR = out.getWritePointer (1);
+            const auto* aL = gatherA.getReadPointer (0);
+            const auto* aR = gatherA.getReadPointer (1);
+            const auto* bL = gatherB.getReadPointer (0);
+            const auto* bR = gatherB.getReadPointer (1);
+            const float step4 = 1.0f / (float) n;
+            for (int k = 0; k < n; ++k)
+            {
+                const float t = (float) (k + 1) * step4;   // rampe : tourner un bouton ne fait pas de clic
+                outL[k] = (gains[0] + t * (target[0] - gains[0])) * aL[k] + (gains[2] + t * (target[2] - gains[2])) * bL[k];
+                outR[k] = (gains[1] + t * (target[1] - gains[1])) * aR[k] + (gains[3] + t * (target[3] - gains[3])) * bR[k];
+            }
+            std::copy (target, target + 4, gains);
+        }
+
+        nodeLength[(size_t) node] = n;
+    }
+    mixerGainsReady = true;
+
+    // La sortie : tout ce qui arrive à la prise OUT de la chaîne (rien de branché = silence)
+    gather (outputNode, 0, gatherA, n);
+    for (int ch = 0; ch < 2; ++ch)
+        buffer.copyFrom (ch, 0, gatherA, ch, 0, n);
+}
+
 bool ChainProcessor::isSlotActive (int slot) const noexcept
 {
     return slotSource[(size_t) slot]->load() >= 0.5f && slotDestination[(size_t) slot].load() >= 0;
@@ -571,7 +801,7 @@ void ChainProcessor::updateModulation (const juce::AudioBuffer<float>& part, int
     }
 
     // Wet Only : les effets de la branche B ne gardent que leur effet (Mix poussé au maximum)
-    if (wetOnly->load() >= 0.5f)
+    if (wetOnly->load() >= 0.5f && ! patchMode.load())
         for (int e = 0; e < ChainRouting::numEffects; ++e)
             if (r.lane[(size_t) e] == ChainRouting::branchB && mixDestination[(size_t) e] >= 0)
                 modSum[(size_t) mixDestination[(size_t) e]] += 2.0f;
@@ -628,6 +858,8 @@ juce::ValueTree ChainProcessor::createState()
     state.setProperty ("phaser", phaserState.toBase64Encoding(), nullptr);
 
     state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
+    state.setProperty ("patch", juce::String (getPatch().toString()), nullptr);
+    state.setProperty ("patchmode", isPatchMode(), nullptr);
 
     // Destinations de la matrice, par leur nom ("delay/time") : robuste si des réglages s'ajoutent un jour
     for (int slot = 0; slot < numSlots; ++slot)
@@ -701,6 +933,17 @@ bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
     // Absent des anciennes sessions : tout en série, dans l'ordre d'origine
     // (sans prévenir l'hôte : charger une session ne la modifie pas)
     routing.store (ChainRouting::Routing::fromString (state.getProperty ("routing").toString().toStdString()).pack());
+
+    // Absents des anciennes sessions : pas de câbles, routage à branches
+    {
+        const auto restored = ChainPatch::Patch::fromString (state.getProperty ("patch").toString().toStdString());
+        {
+            const juce::ScopedLock lock (patchLock);
+            patch = restored;
+        }
+        publishPlan (restored);
+        patchMode.store ((bool) state.getProperty ("patchmode", false));
+    }
 
     // Absentes des anciennes sessions : aucune modulation
     for (int slot = 0; slot < numSlots; ++slot)

@@ -90,8 +90,35 @@ ChainEditor::ChainEditor (ChainProcessor& p)
 
     width = juce::jmax (width, editorWidth);   // 1440 px : le schéma et l'en-tête respirent
 
+    // La baie de brassage : 4 mélangeurs, leur panneau, et l'aide en bas du schéma
+    mixerPanel = std::make_unique<MixerPanel> (chain);
+    addChildComponent (*mixerPanel);
+    for (int m = 0; m < ChainPatch::numMixers; ++m)
+    {
+        auto& cell = mixers[(size_t) m];
+        cell.button = std::make_unique<juce::TextButton> ("Mixer " + juce::String (m + 1));
+        cell.button->setLookAndFeel (&pedalLook);
+        cell.button->setColour (juce::TextButton::buttonOnColourId, MixerPanel::accent().darker (0.5f));
+        cell.button->setTooltip ("Two inputs (A and B) with level and pan. Click: its settings. Drag: move it.");
+        cell.button->onClick = [this] { select (mixerSelection); };
+        cell.button->addMouseListener (this, false);
+        addChildComponent (*cell.button);
+    }
+    patchHint.setText (juce::String::fromUTF8 ("Drag from an OUT jack to an IN jack to patch \xc2\xb7 grab a cable by its IN jack to move it \xc2\xb7 "
+                                               "drag a LFO / ENV jack to a MOD jack \xc2\xb7 right-click a cable or press Delete to remove it"),
+                       juce::dontSendNotification);
+    patchHint.setFont (juce::FontOptions (12.0f));
+    patchHint.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.55f));
+    patchHint.setJustificationType (juce::Justification::centred);
+    addChildComponent (patchHint);
+    setWantsKeyboardFocus (true);
+
+    height = juce::jmax (height, mixerPanel->getHeight());
+    contentHeight = height;
     shown = chain.getRouting();
-    setSize (width, headerHeight + stripHeight + height);
+    shownPatch = chain.getPatch();
+    patchView = chain.isPatchMode();
+    setSize (width, headerHeight + stripHeight() + height);
     select (0);
 
     timerCallback();
@@ -102,6 +129,8 @@ ChainEditor::~ChainEditor()
 {
     previousPreset.setLookAndFeel (nullptr);
     nextPreset.setLookAndFeel (nullptr);
+    for (auto& m : mixers)
+        m.button->setLookAndFeel (nullptr);
 
     // Les interfaces des effets doivent disparaître avant le reste
     for (auto& pedal : pedals)
@@ -170,8 +199,11 @@ void ChainEditor::select (int index)
         pedals[(size_t) i].selectButton->setToggleState (i == index, juce::dontSendNotification);
     }
 
-    modulationPanel->setVisible (index < 0);
-    modulationButton.setToggleState (index < 0, juce::dontSendNotification);
+    modulationPanel->setVisible (index == -1);
+    modulationButton.setToggleState (index == -1, juce::dontSendNotification);
+    mixerPanel->setVisible (index == mixerSelection);
+    for (auto& m : mixers)
+        m.button->setToggleState (index == mixerSelection, juce::dontSendNotification);
     repaint();
 }
 
@@ -201,17 +233,52 @@ void ChainEditor::showRoutingMenu()
 
     const auto& list = ChainRouting::templates();
     for (size_t i = 0; i < list.size(); ++i)
-        menu.addItem ((int) i + 1, list[i].name, true, list[i].routing == shown);
+        menu.addItem ((int) i + 1, list[i].name, true, ! patchView && list[i].routing == shown);
 
     menu.addSeparator();
-    menu.addItem (-1, "Tip: drag a pedal to move it, right-click it for options", false, false);
+    menu.addSectionHeader ("Patch Bay");
+    menu.addItem (1001, juce::String::fromUTF8 ("Patch Bay \xe2\x80\x93 free cables"), true, patchView);
+    menu.addItem (1002, "Rebuild cables from the branches", patchView);
+    menu.addItem (1003, "Clear all cables", patchView && ! shownPatch.cables.empty());
+
+    menu.addSeparator();
+    menu.addItem (-1, patchView ? "Tip: drag a pedal to move it, drag between jacks to patch"
+                                : "Tip: drag a pedal to move it, right-click it for options", false, false);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (routingButton),
                         [safe = juce::Component::SafePointer<ChainEditor> (this)] (int result)
     {
         const auto& templates = ChainRouting::templates();
-        if (safe == nullptr || result <= 0 || result > (int) templates.size())
+        if (safe == nullptr || result <= 0)
             return;
+
+        if (result == 1001)
+        {
+            safe->setPatchView (! safe->patchView);
+            return;
+        }
+        if (result == 1002)
+        {
+            safe->chain.convertRoutingToPatch();
+            safe->shownPatch = safe->chain.getPatch();
+            safe->selectedCable = -1;
+            safe->layoutPatch();
+            safe->repaint();
+            return;
+        }
+        if (result == 1003)
+        {
+            safe->shownPatch.cables.clear();
+            safe->selectedCable = -1;
+            safe->commitPatch();
+            return;
+        }
+        if (result > (int) templates.size())
+            return;
+
+        // Choisir un routage à branches quitte la baie de brassage
+        if (safe->patchView)
+            safe->setPatchView (false);
 
         // Wet/Dry/Wet : effets de B à 100 % et son sec au centre. Les autres modèles mélangent normalement.
         const auto& t = templates[(size_t) result - 1];
@@ -480,6 +547,12 @@ int ChainEditor::pedalForComponent (const juce::Component* c) const
 
 void ChainEditor::mouseDown (const juce::MouseEvent& e)
 {
+    if (patchView)
+    {
+        patchMouseDown (e);
+        return;
+    }
+
     const int effect = pedalForComponent (e.eventComponent);
     if (effect >= 0 && e.mods.isPopupMenu())
         showPedalMenu (effect);
@@ -487,6 +560,12 @@ void ChainEditor::mouseDown (const juce::MouseEvent& e)
 
 void ChainEditor::mouseDrag (const juce::MouseEvent& e)
 {
+    if (patchView)
+    {
+        patchMouseDrag (e);
+        return;
+    }
+
     const int effect = pedalForComponent (e.eventComponent);
     if (effect < 0 || e.mods.isPopupMenu())
         return;
@@ -502,6 +581,12 @@ void ChainEditor::mouseDrag (const juce::MouseEvent& e)
 
 void ChainEditor::mouseUp (const juce::MouseEvent& e)
 {
+    if (patchView)
+    {
+        patchMouseUp (e);
+        return;
+    }
+
     if (dragging < 0 || pedalForComponent (e.eventComponent) < 0)
         return;
 
@@ -584,9 +669,19 @@ void ChainEditor::timerCallback()
     if (presetButton.getButtonText() != presetText)
         presetButton.setButtonText (presetText);
 
+    // Baie de brassage : mode ou câbles changés ailleurs (session rechargée, preset)
+    if (chain.isPatchMode() != patchView && movingNode < 0 && ! cableDrag.active)
+        setPatchView (chain.isPatchMode());
+    if (patchView && movingNode < 0 && ! cableDrag.active && chain.getPatch() != shownPatch)
+    {
+        shownPatch = chain.getPatch();
+        selectedCable = -1;
+        layoutPatch();
+    }
+
     // Routage changé ailleurs (session rechargée, automation…)
     const auto current = chain.getRouting();
-    if (current != shown && dragging < 0)
+    if (current != shown && dragging < 0 && ! patchView)
     {
         shown = current;
         layoutDiagram();
@@ -600,7 +695,7 @@ void ChainEditor::timerCallback()
     }
     wetOnlyButton.setAlpha (branchAlpha);
 
-    repaint (0, headerHeight, getWidth(), stripHeight);
+    repaint (0, headerHeight, getWidth(), stripHeight());
 }
 
 void ChainEditor::paint (juce::Graphics& g)
@@ -615,6 +710,12 @@ void ChainEditor::paint (juce::Graphics& g)
     // Fond du schéma
     g.setColour (juce::Colour (0xff1b1d22));
     g.fillRoundedRectangle (diagram.toFloat(), 6.0f);
+
+    if (patchView)
+    {
+        paintPatch (g);
+        return;
+    }
 
     const bool parallel = shown.hasParallel();
     const float yA = (float) rowY (ChainRouting::branchA);
@@ -753,11 +854,17 @@ void ChainEditor::paint (juce::Graphics& g)
     // Fine ligne de la couleur de la pédale affichée (ou de la matrice), au-dessus de ses réglages
     g.setColour (juce::isPositiveAndBelow (selected, (int) pedals.size()) ? pedals[(size_t) selected].colour
                                                                             : ModulationPanel::accent());
-    g.fillRect (0, headerHeight + stripHeight - 3, getWidth(), 3);
+    g.fillRect (0, headerHeight + stripHeight() - 3, getWidth(), 3);
 }
 
 void ChainEditor::paintOverChildren (juce::Graphics& g)
 {
+    if (patchView)
+    {
+        paintPatchOver (g);
+        return;
+    }
+
     if (dragging < 0)
         return;
 
@@ -864,9 +971,25 @@ void ChainEditor::resized()
     nextPreset.setBounds (header.removeFromRight (30).reduced (0, 7));
     presetButton.setBounds (header.reduced (2, 7));
 
-    auto strip = getLocalBounds().withTrimmedTop (headerHeight).removeFromTop (stripHeight - 3);
-    diagram = strip.removeFromTop (diagramHeight).reduced (10, 0);
-    layoutDiagram();
+    auto strip = getLocalBounds().withTrimmedTop (headerHeight).removeFromTop (stripHeight() - 3);
+    diagram = strip.removeFromTop (patchView ? patchDiagramHeight : diagramHeight).reduced (10, 0);
+
+    // Schéma à branches ou baie de brassage : chacun ses commandes sous le schéma
+    for (auto* control : { &balance, &spread, &branchWidth, &crossFeedback })
+    {
+        control->slider.setVisible (! patchView);
+        control->label.setVisible (! patchView);
+    }
+    wetOnlyButton.setVisible (! patchView);
+    patchHint.setVisible (patchView);
+    patchHint.setBounds (strip.reduced (10, 4));
+    for (auto& m : mixers)
+        m.button->setVisible (patchView);
+
+    if (patchView)
+        layoutPatch();
+    else
+        layoutDiagram();
 
     // Wet Only, puis Balance, Spread, B Width, Cross Feedback
     auto controls = strip.reduced (10, 4);
@@ -881,6 +1004,7 @@ void ChainEditor::resized()
 
     // Réglages de la pédale affichée
     for (auto& pedal : pedals)
-        pedal.editor->setTopLeftPosition ((getWidth() - pedal.editor->getWidth()) / 2, headerHeight + stripHeight);
-    modulationPanel->setTopLeftPosition ((getWidth() - modulationPanel->getWidth()) / 2, headerHeight + stripHeight);
+        pedal.editor->setTopLeftPosition ((getWidth() - pedal.editor->getWidth()) / 2, headerHeight + stripHeight());
+    modulationPanel->setTopLeftPosition ((getWidth() - modulationPanel->getWidth()) / 2, headerHeight + stripHeight());
+    mixerPanel->setTopLeftPosition ((getWidth() - mixerPanel->getWidth()) / 2, headerHeight + stripHeight());
 }
