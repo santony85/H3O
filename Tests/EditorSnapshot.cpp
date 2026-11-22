@@ -7,6 +7,7 @@
 #include "LayeredShift/LayeredShiftEditor.h"
 #include "SweptFilter/SweptFilterEditor.h"
 #include "Compressor/CompressorEditor.h"
+#include "Tremolo/TremoloEditor.h"
 
 #include <cstdio>
 
@@ -56,6 +57,12 @@ int main (int argc, char** argv)
         CompressorProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("Compressor.png"));
+    }
+
+    {
+        TremoloProcessor fx;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("Tremolo.png"));
     }
 
     {

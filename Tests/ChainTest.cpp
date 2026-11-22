@@ -1,3 +1,4 @@
+#include <algorithm>
 // Tests du routage de H3O Chain : ordre libre, branches parallèles A / B, état des sessions.
 //   ./ChainTest        Cible Xcode : ChainTest
 #include "ChainProcessor.h"
@@ -913,6 +914,56 @@ namespace
                && reopened.isEffectOn (compressor), "la session retrouve le compresseur et ses réglages");
     }
 
+    // Le trémolo dans la chaîne : entre le chorus et le délai, il fait onduler le volume, et la session le retrouve
+    void tremoloInChain()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Trémolo dans la chaîne ---\n");
+
+        const auto s = Routing::series();
+        const auto pre0 = s.effectsIn (pre);
+        const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
+        check (at (tremolo) == at (chorus) + 1 && at (delay) == at (tremolo) + 1, "en série : Chorus → Tremolo → Delay");
+
+        const auto old = Routing::fromString ("compressor:pre,filter:pre,amp:pre,harmonizer:a,reverse:pre,layered:pre,chorus:pre,"
+                                              "delay:b,banddelay:pre,ultratap:pre,reverb:post");
+        check (old.laneOf (harmonizer) == branchA && old.laneOf (delay) == branchB && old.laneOf (reverb) == post
+               && Routing::unpack (old.pack()) == old, "session d'avant le trémolo : routage intact");
+
+        ChainProcessor chain;
+        onlyOn (chain, { tremolo });
+        chain.tremolo.setCurrentProgram (3);   // Choppy Square
+        chain.prepareToPlay (48000.0, 512);
+
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        float lo = 1.0f, hi = 0.0f;
+        for (int block = 0; block < 100; ++block)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 512; ++i)
+                    buffer.setSample (ch, i, 0.5f);
+            chain.processBlock (buffer, midi);
+            if (block >= 10)
+                for (int i = 0; i < 512; ++i)
+                {
+                    lo = std::min (lo, buffer.getSample (0, i));
+                    hi = std::max (hi, buffer.getSample (0, i));
+                }
+        }
+        std::printf ("  volume de %.2f à %.2f (entrée 0.50)\n", lo, hi);
+        check (lo < 0.1f && hi > 0.45f, "le volume ondule");
+
+        chain.tremolo.parameters.getParameter ("depth")->setValueNotifyingHost (
+            chain.tremolo.parameters.getParameter ("depth")->convertTo0to1 (42.0f));
+        juce::MemoryBlock session;
+        chain.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (std::abs (reopened.tremolo.parameters.getRawParameterValue ("depth")->load() - 42.0f) < 0.05f
+               && reopened.isEffectOn (tremolo), "la session retrouve le trémolo et ses réglages");
+    }
+
     void presets()
     {
         using namespace ChainRouting;
@@ -1090,6 +1141,7 @@ int main (int argc, char** argv)
     wetDryWet();
     presets();
     compressorInChain();
+    tremoloInChain();
     factoryPresets();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");

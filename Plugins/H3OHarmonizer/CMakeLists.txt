@@ -6,6 +6,7 @@ juce_add_plugin(H3OHarmonizer
     PLUGIN_CODE Shrm
     FORMATS AU VST3 Standalone
     PRODUCT_NAME "H3O Harmonizer"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/Resources/H3OIcon.png"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE

@@ -6,6 +6,7 @@ juce_add_plugin(H3OReverse
     PLUGIN_CODE Srev
     FORMATS AU VST3 Standalone
     PRODUCT_NAME "H3O Reverse"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/Resources/H3OIcon.png"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE

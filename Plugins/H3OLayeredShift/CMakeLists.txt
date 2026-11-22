@@ -6,6 +6,7 @@ juce_add_plugin(H3OLayeredShift
     PLUGIN_CODE Slsh
     FORMATS AU VST3 Standalone
     PRODUCT_NAME "H3O Layered Shift"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/Resources/H3OIcon.png"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
