@@ -1157,8 +1157,7 @@ namespace
         const auto s = Routing::series();
         const auto pre0 = s.effectsIn (pre);
         const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
-        check (at (compressor) == 0 && at (whammy) == 1 && at (filter) == 2, "en série : Compressor → Whammy → Filter");
-        check (Routing::unpack (s.pack()) == s, "15 effets : le routage tient dans 64 bits");
+        check (at (compressor) == 0 && at (whammy) == 2 && at (filter) == 3, "en série : Compressor → Octaver → Whammy → Filter");
 
         ChainProcessor chain;
         onlyOn (chain, { whammy });
@@ -1203,6 +1202,75 @@ namespace
         check (std::abs (reopened.whammy.parameters.getRawParameterValue ("heel")->load() + 5.0f) < 0.05f
                && reopened.isEffectOn (whammy), "la session retrouve le whammy et ses réglages");
         check (chain.findDestination ("whammy/pedal") >= 0, "la pédale du whammy est modulable");
+    }
+
+    void octaverInChain()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Octaver dans la chaîne ---\n");
+
+        const auto s = Routing::series();
+        const auto pre0 = s.effectsIn (pre);
+        const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
+        check (at (compressor) == 0 && at (octaver) == 1 && at (whammy) == 2, "en série : Compressor → Octaver → Whammy");
+
+        // 16 effets : le routage tient toujours dans 64 bits (ordre inversé, effets répartis dans les quatre sections)
+        Routing mixed = s;
+        for (int i = 0; i < numEffects; ++i)
+            mixed.move (s.order[(size_t) i], i % numLanes, 0);
+        check (Routing::unpack (s.pack()) == s && Routing::unpack (mixed.pack()) == mixed && (mixed.pack() & Routing::validBit) != 0,
+               "16 effets : le routage tient dans 64 bits");
+
+        // Une ancienne session (sans octaver) : l'octaver se met à la fin, éteint
+        const auto old = Routing::fromString ("compressor:pre,whammy:pre,filter:pre,amp:pre,harmonizer:a,reverse:a,layered:pre,phaser:pre,"
+                                              "flanger:pre,chorus:b,tremolo:pre,delay:b,banddelay:pre,ultratap:pre,reverb:post");
+        check (old.order.back() == octaver && old.laneOf (harmonizer) == branchA, "ancienne session : l'octaver arrive à la fin");
+
+        ChainProcessor chain;
+        onlyOn (chain, { octaver });
+        auto set = [&chain] (const char* id, float value)
+        {
+            auto* param = chain.octaver.parameters.getParameter (id);
+            param->setValueNotifyingHost (param->convertTo0to1 (value));
+        };
+        set ("dry", 0.0f);
+        set ("sub1", 100.0f);
+        set ("sub2", 0.0f);
+        set ("up", 0.0f);
+        chain.prepareToPlay (48000.0, 512);
+
+        // 220 Hz : l'énergie passe à 110 Hz (une octave en dessous), sur la dernière seconde
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        double re110 = 0, im110 = 0, re220 = 0, im220 = 0;
+        for (int block = 0; block < 188; ++block)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 512; ++i)
+                    buffer.setSample (ch, i, 0.4f * std::sin (2.0f * 3.14159265f * 220.0f * (float) (block * 512 + i) / 48000.0f));
+            chain.processBlock (buffer, midi);
+            if (block >= 94)
+                for (int i = 0; i < 512; ++i)
+                {
+                    const double t = (block * 512 + i) / 48000.0, v = buffer.getSample (0, i);
+                    re110 += v * std::cos (2.0 * 3.14159265358979 * 110.0 * t);
+                    im110 += v * std::sin (2.0 * 3.14159265358979 * 110.0 * t);
+                    re220 += v * std::cos (2.0 * 3.14159265358979 * 220.0 * t);
+                    im220 += v * std::sin (2.0 * 3.14159265358979 * 220.0 * t);
+                }
+        }
+        const double ratio = (re110 * re110 + im110 * im110) / (re220 * re220 + im220 * im220 + 1.0e-12);
+        std::printf ("  110 Hz %+.1f dB par rapport à 220 Hz\n", 10.0 * std::log10 (ratio + 1.0e-30));
+        check (ratio > 10.0, "l'octaver descend d'une octave dans la chaîne");
+
+        set ("tone", 600.0f);
+        juce::MemoryBlock session;
+        chain.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (std::abs (reopened.octaver.parameters.getRawParameterValue ("tone")->load() - 600.0f) < 1.0f
+               && reopened.isEffectOn (octaver), "la session retrouve l'octaver et ses réglages");
+        check (chain.findDestination ("octaver/sub1") >= 0 && chain.findDestination ("octaver/tone") >= 0, "les niveaux et le tone de l'octaver sont modulables");
     }
 
     // La baie de brassage : câbles libres, mélangeurs, boucles, sessions
@@ -1527,6 +1595,7 @@ int main (int argc, char** argv)
     phaserInChain();
     flangerInChain();
     whammyInChain();
+    octaverInChain();
     patchBay();
     factoryPresets();
 

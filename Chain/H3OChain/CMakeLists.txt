@@ -1,4 +1,4 @@
-# H3O Chain : le multi-effets. Contient les effets en série (Compressor → Whammy → Filter → Amp → Harmonizer → Reverse → Layered Shift → Phaser → Flanger → Chorus → Tremolo → Delay → Band Delay → Ultra-Tap → Reverb).
+# H3O Chain : le multi-effets. Contient les effets en série (Compressor → Octaver → Whammy → Filter → Amp → Harmonizer → Reverse → Layered Shift → Phaser → Flanger → Chorus → Tremolo → Delay → Band Delay → Ultra-Tap → Reverb).
 # Utilisable comme plugin dans Logic ou comme application autonome.
 juce_add_plugin(H3OChain
     COMPANY_NAME "H3O"
@@ -45,6 +45,7 @@ audiofx_setup_plugin(H3OChain
     ${TREMOLO_SOURCES}
     ${PHASER_SOURCES}
     ${FLANGER_SOURCES}
-    ${WHAMMY_SOURCES})
+    ${WHAMMY_SOURCES}
+    ${OCTAVER_SOURCES})
 
 audiofx_link_nam(H3OChain)

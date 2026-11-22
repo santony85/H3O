@@ -15,6 +15,7 @@
 #include "Phaser/PhaserProcessor.h"
 #include "Flanger/FlangerProcessor.h"
 #include "Whammy/WhammyProcessor.h"
+#include "Octaver/OctaverProcessor.h"
 #include "Reverb/ReverbProcessor.h"
 #include "ChainRouting.h"
 #include "ChainPatch.h"
@@ -83,6 +84,7 @@ public:
     PhaserProcessor phaser;
     FlangerProcessor flanger;
     WhammyProcessor whammy;
+    OctaverProcessor octaver;
 
     bool isFilterOn() const noexcept     { return filterOn->load() >= 0.5f; }
     bool isAmpOn() const noexcept        { return ampOn->load() >= 0.5f; }
@@ -216,6 +218,7 @@ private:
     std::atomic<float>* phaserOn = nullptr;
     std::atomic<float>* flangerOn = nullptr;
     std::atomic<float>* whammyOn = nullptr;
+    std::atomic<float>* octaverOn = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainProcessor)
 };
