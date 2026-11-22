@@ -101,6 +101,7 @@ private:
     ChainProcessor& chain;
     InputMode::Box inputBox { chain.parameters, juce::Colours::white };
     juce::TextButton routingButton, modulationButton;
+    juce::TextButton presetViewButton { "Preset" }, patchViewButton { "Patch" };   // bascule vue à branches / baie
     juce::TextButton presetButton, previousPreset { juce::String::fromUTF8 ("\xe2\x97\x80") }, nextPreset { juce::String::fromUTF8 ("\xe2\x96\xb6") };
     std::unique_ptr<juce::AlertWindow> presetDialog;
     std::unique_ptr<ModulationPanel> modulationPanel;

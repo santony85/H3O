@@ -24,6 +24,19 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     routingButton.onClick = [this] { showRoutingMenu(); };
     addAndMakeVisible (routingButton);
 
+    // Preset | Patch : passer de la vue à branches (celle des presets) à la baie de brassage, et retour
+    presetViewButton.setTooltip ("Preset view: the routing of the preset, in branches A and B");
+    patchViewButton.setTooltip ("Patch view: the same chain as free cables, to patch as you like");
+    presetViewButton.setConnectedEdges (juce::Button::ConnectedOnRight);
+    patchViewButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
+    for (auto* b : { &presetViewButton, &patchViewButton })
+    {
+        b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4a6a8a));
+        addAndMakeVisible (*b);
+    }
+    presetViewButton.onClick = [this] { if (patchView) setPatchView (false); };
+    patchViewButton.onClick = [this] { if (! patchView) setPatchView (true); };
+
     modulationButton.setButtonText ("Modulation");
     modulationButton.setTooltip ("The modulation matrix: LFOs, envelope, pitch and random moving your pedals' settings");
     modulationButton.setColour (juce::TextButton::buttonOnColourId, ModulationPanel::accent().darker (0.4f));
@@ -959,8 +972,13 @@ void ChainEditor::resized()
 {
     auto header = getLocalBounds().removeFromTop (headerHeight);
     inputBox.setBounds (header.removeFromRight (InputMode::Box::preferredWidth + 15).withTrimmedRight (15).reduced (0, 5));
-    header.removeFromLeft (170);   // le titre
-    routingButton.setBounds (header.removeFromLeft (230).reduced (0, 7));
+    header.removeFromLeft (150);   // le titre
+    presetViewButton.setBounds (header.removeFromLeft (66).reduced (0, 7));
+    patchViewButton.setBounds (header.removeFromLeft (66).reduced (0, 7));
+    presetViewButton.setToggleState (! patchView, juce::dontSendNotification);
+    patchViewButton.setToggleState (patchView, juce::dontSendNotification);
+    header.removeFromLeft (8);
+    routingButton.setBounds (header.removeFromLeft (220).reduced (0, 7));
     header.removeFromLeft (8);
     modulationButton.setBounds (header.removeFromLeft (110).reduced (0, 7));
 

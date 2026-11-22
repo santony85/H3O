@@ -163,6 +163,8 @@ private:
     std::atomic<bool> patchMode { false };
     mutable juce::CriticalSection patchLock;            // la baie modifiée par l'interface (et les sessions)
     ChainPatch::Patch patch = ChainPatch::Patch::defaultLayout();
+    juce::String patchSource;                           // l'état des branches quand on a quitté (ou rempli) la baie
+    juce::String branchSignature();                     // routage, Balance, Spread, Wet Only et pédales allumées
     juce::SpinLock planLock;                            // passage du plan de l'interface au son, sans attente
     ChainPatch::Plan pendingPlan, activePlan;
     bool planPending = false;

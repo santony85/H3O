@@ -593,13 +593,30 @@ void ChainProcessor::convertRoutingToPatch()
     set (mixerParamId (0, "panb"), c.panB);
 
     setPatch (c.patch);
+    patchSource = branchSignature();
+}
+
+juce::String ChainProcessor::branchSignature()
+{
+    juce::String s (getRouting().toString());
+    s << "|" << parameters.getRawParameterValue ("branchbalance")->load()
+      << "|" << parameters.getRawParameterValue ("branchspread")->load()
+      << "|" << (wetOnly->load() >= 0.5f ? 1 : 0) << "|";
+    for (int e = 0; e < ChainRouting::numEffects; ++e)
+        s << (isEffectOn (e) ? '1' : '0');
+    return s;
 }
 
 void ChainProcessor::setPatchMode (bool on)
 {
-    // Première fois : la baie part du routage à branches actuel, déjà câblé
-    if (on && getPatch().cables.empty())
+    // Vue Patch : la baie reprend le routage à branches s'il a changé depuis qu'on l'a quittée
+    // (autre preset, autre routage…) ; sinon on retrouve ses câbles tels quels
+    if (on && ! isPatchMode() && (getPatch().cables.empty() || branchSignature() != patchSource))
         convertRoutingToPatch();
+
+    // Vue Preset : on note l'état des branches, pour savoir au retour s'il a changé
+    if (! on && isPatchMode())
+        patchSource = branchSignature();
 
     if (patchMode.exchange (on) != on)
         updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
@@ -860,6 +877,7 @@ juce::ValueTree ChainProcessor::createState()
     state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
     state.setProperty ("patch", juce::String (getPatch().toString()), nullptr);
     state.setProperty ("patchmode", isPatchMode(), nullptr);
+    state.setProperty ("patchsource", isPatchMode() ? branchSignature() : patchSource, nullptr);
 
     // Destinations de la matrice, par leur nom ("delay/time") : robuste si des réglages s'ajoutent un jour
     for (int slot = 0; slot < numSlots; ++slot)
@@ -943,6 +961,7 @@ bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
         }
         publishPlan (restored);
         patchMode.store ((bool) state.getProperty ("patchmode", false));
+        patchSource = state.getProperty ("patchsource").toString();
     }
 
     // Absentes des anciennes sessions : aucune modulation

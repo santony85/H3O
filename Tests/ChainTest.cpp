@@ -1127,6 +1127,27 @@ namespace
             ChainProcessor old;   // session sans baie : routage à branches
             check (! old.isPatchMode() && old.getPatch().cables.empty(), "par défaut : routage à branches, aucun câble");
         }
+
+        // Vue Preset ⇄ vue Patch : on retrouve ses câbles, sauf si les branches ont changé entre-temps
+        {
+            ChainProcessor chain;
+            chain.setPatchMode (true);
+            auto p = chain.getPatch();
+            p.connect (delay, mixerNode (2), 0);
+            chain.setPatch (p);
+            chain.setPatchMode (false);
+            chain.setPatchMode (true);
+            const bool kept = chain.getPatch() == p;
+
+            chain.setPatchMode (false);
+            chain.setRouting (templates()[1].routing);   // autre routage (comme un autre preset)
+            chain.setPatchMode (true);
+            ChainProcessor fresh;
+            fresh.setRouting (templates()[1].routing);
+            fresh.setPatchMode (true);
+            const bool followed = chain.getPatch().cables == fresh.getPatch().cables;
+            check (kept && followed, "Preset ⇄ Patch : câbles gardés, ou refaits si le routage a changé");
+        }
     }
 
     void presets()
