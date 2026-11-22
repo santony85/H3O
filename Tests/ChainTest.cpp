@@ -964,6 +964,56 @@ namespace
                && reopened.isEffectOn (tremolo), "la session retrouve le trémolo et ses réglages");
     }
 
+    // Le phaser dans la chaîne : entre Layered et Chorus, il creuse le son, et la session le retrouve
+    void phaserInChain()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Phaser dans la chaîne ---\n");
+
+        const auto s = Routing::series();
+        const auto pre0 = s.effectsIn (pre);
+        const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
+        check (at (phaser) == at (layered) + 1 && at (chorus) == at (phaser) + 1, "en série : Layered → Phaser → Chorus");
+        check (Routing::unpack (s.pack()) == s, "13 effets : le routage tient toujours dans 64 bits");
+
+        ChainProcessor chain;
+        onlyOn (chain, { phaser });
+        chain.phaser.parameters.getParameter ("depth")->setValueNotifyingHost (0.0f);   // creux figés
+        chain.phaser.parameters.getParameter ("centre")->setValueNotifyingHost (
+            chain.phaser.parameters.getParameter ("centre")->convertTo0to1 (1000.0f));
+        chain.prepareToPlay (48000.0, 512);
+
+        auto levelAt = [&chain] (float hz)
+        {
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            double sum = 0.0;
+            for (int block = 0; block < 60; ++block)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 512; ++i)
+                        buffer.setSample (ch, i, 0.5f * std::sin (2.0f * 3.14159265f * hz * (float) (block * 512 + i) / 48000.0f));
+                chain.processBlock (buffer, midi);
+                if (block >= 30)
+                    for (int i = 0; i < 512; ++i)
+                        sum += (double) buffer.getSample (0, i) * buffer.getSample (0, i);
+            }
+            return 20.0 * std::log10 (std::sqrt (sum / (30.0 * 512.0)) / 0.35355);
+        };
+        const double notch = levelAt (414.2f), pass = levelAt (1000.0f);
+        std::printf ("  414 Hz %.1f dB, 1 kHz %.1f dB\n", notch, pass);
+        check (notch < -25.0 && pass > -1.0, "le phaser creuse le son aux bonnes fréquences");
+
+        chain.phaser.parameters.getParameter ("feedback")->setValueNotifyingHost (
+            chain.phaser.parameters.getParameter ("feedback")->convertTo0to1 (-40.0f));
+        juce::MemoryBlock session;
+        chain.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (std::abs (reopened.phaser.parameters.getRawParameterValue ("feedback")->load() + 40.0f) < 0.05f
+               && reopened.isEffectOn (phaser), "la session retrouve le phaser et ses réglages");
+    }
+
     void presets()
     {
         using namespace ChainRouting;
@@ -1142,6 +1192,7 @@ int main (int argc, char** argv)
     presets();
     compressorInChain();
     tremoloInChain();
+    phaserInChain();
     factoryPresets();
 
     std::printf ("\n%s (%d échec%s)\n", failures == 0 ? "TOUT EST BON" : "PROBLÈMES", failures, failures > 1 ? "s" : "");

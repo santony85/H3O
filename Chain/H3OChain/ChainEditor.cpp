@@ -59,6 +59,7 @@ ChainEditor::ChainEditor (ChainProcessor& p)
     addPedal ("Reverb",     juce::Colour (0xff7090f0));
     addPedal ("Compressor", juce::Colour (0xffc8d0e0));
     addPedal ("Tremolo",    juce::Colour (0xffc89060));
+    addPedal ("Phaser",     juce::Colour (0xfff08030));
 
     setupBranchControl (balance,       "branchbalance", "Balance",  "0 %: only branch A, 100 %: only branch B");
     setupBranchControl (spread,        "branchspread",  "Spread",   "Sends branch A to the left and branch B to the right");

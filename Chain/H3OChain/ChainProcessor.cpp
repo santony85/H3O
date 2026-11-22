@@ -21,6 +21,7 @@ namespace
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "reverbon", 1 }, "Reverb On", false),
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "compressoron", 1 }, "Compressor On", false),
             std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "tremoloon", 1 }, "Tremolo On", false),
+            std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "phaseron", 1 }, "Phaser On", false),
             // Branches parallèles A et B
             std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "branchbalance", 1 }, "Branch Balance",
                                                          juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f,
@@ -114,6 +115,7 @@ ChainProcessor::ChainProcessor()
     reverbOn     = parameters.getRawParameterValue ("reverbon");
     compressorOn = parameters.getRawParameterValue ("compressoron");
     tremoloOn    = parameters.getRawParameterValue ("tremoloon");
+    phaserOn     = parameters.getRawParameterValue ("phaseron");
 
     // Lus à travers la modulation, comme les réglages des effets
     branchBalance = chainTargets.get (parameters, "branchbalance");
@@ -144,15 +146,15 @@ ChainProcessor::ChainProcessor()
         v = 0.0f;
 
     // Même ordre que ChainRouting::Effect
-    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb, &compressor, &tremolo };
-    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn, compressorOn, tremoloOn };
+    effects  = { &filter, &amp, &harmonizer, &reverse, &layered, &chorus, &delay, &bandDelay, &ultraTap, &reverb, &compressor, &tremolo, &phaser };
+    onParams = { filterOn, ampOn, harmonizerOn, reverseOn, layeredOn, chorusOn, delayOn, bandDelayOn, ultraTapOn, reverbOn, compressorOn, tremoloOn, phaserOn };
 
     // Tout ce que la matrice peut moduler : les réglages continus de chaque effet, puis les branches
     static const char* effectNames[] = { "Filter", "Amp", "Harmonizer", "Reverse", "Layered", "Chorus",
-                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Tremolo", "Branches" };
+                                         "Delay", "Band Delay", "Ultra-Tap", "Reverb", "Compressor", "Tremolo", "Phaser", "Branches" };
     std::array<ModTargets*, ChainRouting::numEffects + 1> targetLists {
         &filter.modulation, &amp.modulation, &harmonizer.modulation, &reverse.modulation, &layered.modulation,
-        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &compressor.modulation, &tremolo.modulation, &chainTargets
+        &chorus.modulation, &delay.modulation, &bandDelay.modulation, &ultraTap.modulation, &reverb.modulation, &compressor.modulation, &tremolo.modulation, &phaser.modulation, &chainTargets
     };
 
     for (int e = 0; e <= ChainRouting::numEffects; ++e)
@@ -195,12 +197,13 @@ ChainProcessor::ChainProcessor()
     reverb.input.setInsideChain();
     compressor.input.setInsideChain();
     tremolo.input.setInsideChain();
+    phaser.input.setInsideChain();
 }
 
 const char* ChainProcessor::onParamId (int id)
 {
     static const char* ids[] = { "filteron", "ampon", "harmonizeron", "reverseon", "layeredon",
-                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon", "compressoron", "tremoloon" };
+                                 "choruson", "delayon", "banddelayon", "ultratapon", "reverbon", "compressoron", "tremoloon", "phaseron" };
     return ids[juce::jlimit (0, ChainRouting::numEffects - 1, id)];
 }
 
@@ -595,7 +598,7 @@ juce::ValueTree ChainProcessor::createState()
     juce::ValueTree state ("SIMPLE_CHAIN");
     state.appendChild (parameters.copyState(), nullptr);
 
-    juce::MemoryBlock filterState, ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState, compressorState, tremoloState;
+    juce::MemoryBlock filterState, ampState, harmonizerState, reverseState, layeredState, chorusState, delayState, bandDelayState, ultraTapState, reverbState, compressorState, tremoloState, phaserState;
     filter.getStateInformation (filterState);
     amp.getStateInformation (ampState);
     harmonizer.getStateInformation (harmonizerState);
@@ -608,6 +611,7 @@ juce::ValueTree ChainProcessor::createState()
     reverb.getStateInformation (reverbState);
     compressor.getStateInformation (compressorState);
     tremolo.getStateInformation (tremoloState);
+    phaser.getStateInformation (phaserState);
 
     state.setProperty ("harmonizer", harmonizerState.toBase64Encoding(), nullptr);
     state.setProperty ("filter", filterState.toBase64Encoding(), nullptr);
@@ -621,6 +625,7 @@ juce::ValueTree ChainProcessor::createState()
     state.setProperty ("reverb", reverbState.toBase64Encoding(), nullptr);
     state.setProperty ("compressor", compressorState.toBase64Encoding(), nullptr);
     state.setProperty ("tremolo", tremoloState.toBase64Encoding(), nullptr);
+    state.setProperty ("phaser", phaserState.toBase64Encoding(), nullptr);
 
     state.setProperty ("routing", juce::String (getRouting().toString()), nullptr);
 
@@ -691,6 +696,7 @@ bool ChainProcessor::restoreState (const juce::ValueTree& state, bool keepInput)
     restore ("ultratap", ultraTap);   // absent des anciennes sessions : réglages d'usine
     restore ("compressor", compressor);   // absent des anciennes sessions : réglages d'usine (et éteint)
     restore ("tremolo", tremolo);         // absent des anciennes sessions : réglages d'usine (et éteint)
+    restore ("phaser", phaser);           // absent des anciennes sessions : réglages d'usine (et éteint)
 
     // Absent des anciennes sessions : tout en série, dans l'ordre d'origine
     // (sans prévenir l'hôte : charger une session ne la modifie pas)

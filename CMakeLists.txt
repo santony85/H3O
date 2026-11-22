@@ -156,6 +156,14 @@ set(TREMOLO_SOURCES
     ${EFFECTS_DIR}/Tremolo/TremoloEditor.h
     ${EFFECTS_DIR}/Tremolo/TremoloEditor.cpp)
 
+set(PHASER_SOURCES
+    ${COMMON_SOURCES}
+    ${EFFECTS_DIR}/Phaser/PhaserEngine.h
+    ${EFFECTS_DIR}/Phaser/PhaserProcessor.h
+    ${EFFECTS_DIR}/Phaser/PhaserProcessor.cpp
+    ${EFFECTS_DIR}/Phaser/PhaserEditor.h
+    ${EFFECTS_DIR}/Phaser/PhaserEditor.cpp)
+
 set(SWEPTFILTER_SOURCES
     ${COMMON_SOURCES}
     ${EFFECTS_DIR}/SweptFilter/SweptFilterEngine.h
@@ -203,6 +211,7 @@ add_subdirectory(Plugins/H3OLayeredShift)
 add_subdirectory(Plugins/H3OSweptFilter)
 add_subdirectory(Plugins/H3OCompressor)
 add_subdirectory(Plugins/H3OTremolo)
+add_subdirectory(Plugins/H3OPhaser)
 add_subdirectory(Chain/H3OChain)
 
 #==============================================================================
@@ -225,6 +234,13 @@ target_compile_features(CompressorTest PRIVATE cxx_std_17)
 add_executable(TremoloTest Tests/TremoloTest.cpp)
 target_include_directories(TremoloTest PRIVATE ${EFFECTS_DIR}/Tremolo)
 target_compile_features(TremoloTest PRIVATE cxx_std_17)
+
+#==============================================================================
+# Test du phaser, sans JUCE : cible PhaserTest
+#==============================================================================
+add_executable(PhaserTest Tests/PhaserTest.cpp)
+target_include_directories(PhaserTest PRIVATE ${EFFECTS_DIR}/Phaser)
+target_compile_features(PhaserTest PRIVATE cxx_std_17)
 
 #==============================================================================
 # Test du chorus, sans JUCE : cible ChorusTest
@@ -301,7 +317,7 @@ juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
     Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES})
 target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/H3OChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
@@ -314,7 +330,7 @@ juce_add_console_app(ChainTest PRODUCT_NAME "ChainTest")
 target_sources(ChainTest PRIVATE Tests/ChainTest.cpp
     Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp Chain/H3OChain/FactoryPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
-    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES})
+    ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES} ${TREMOLO_SOURCES} ${PHASER_SOURCES})
 target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/H3OChain)
 target_compile_definitions(ChainTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(ChainTest)
