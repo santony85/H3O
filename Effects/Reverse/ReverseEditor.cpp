@@ -61,7 +61,7 @@ void ReverseEditor::paint (juce::Graphics& g)
     g.fillAll (background);
     g.setColour (juce::Colours::white);
     g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-    g.drawText ("SIMPLE REVERSE", getLocalBounds().removeFromTop (40).withTrimmedLeft (15),
+    g.drawText ("H3O REVERSE", getLocalBounds().removeFromTop (40).withTrimmedLeft (15),
                 juce::Justification::centredLeft);
 }
 

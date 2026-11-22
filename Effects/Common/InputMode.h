@@ -44,7 +44,7 @@ namespace InputMode
     public:
         void attach (juce::AudioProcessorValueTreeState& state) { param = state.getRawParameterValue ("input"); }
 
-        // Dans Simple Chain, c'est la chaîne qui choisit l'entrée : l'effet ne touche à rien
+        // Dans H3O Chain, c'est la chaîne qui choisit l'entrée : l'effet ne touche à rien
         // et son menu Input est masqué
         void setInsideChain() noexcept      { insideChain = true; }
         bool isInsideChain() const noexcept { return insideChain; }

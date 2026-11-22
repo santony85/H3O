@@ -21,7 +21,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    const juce::String getName() const override { return "Simple Compressor"; }
+    const juce::String getName() const override { return "H3O Compressor"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -37,7 +37,7 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    // Les réglages du moment (réglages + modulation de Simple Chain), pour l'interface
+    // Les réglages du moment (réglages + modulation de H3O Chain), pour l'interface
     CompressorEngine::Settings currentSettings() const;
 
     // Pour l'interface : réduction de gain (dB) et niveau d'entrée vu par le détecteur (dB)

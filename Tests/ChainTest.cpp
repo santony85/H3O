@@ -1,4 +1,4 @@
-// Tests du routage de Simple Chain : ordre libre, branches parallèles A / B, état des sessions.
+// Tests du routage de H3O Chain : ordre libre, branches parallèles A / B, état des sessions.
 //   ./ChainTest        Cible Xcode : ChainTest
 #include "ChainProcessor.h"
 #include "FactoryPresets.h"
@@ -1065,7 +1065,7 @@ int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
 
-    // ./ChainTest --factory : écrit les presets d'usine dans ~/Music/AudioFX/Simple Chain Presets/H3000 Inspired
+    // ./ChainTest --factory : écrit les presets d'usine dans ~/Music/H3O/Chain Presets/H3000 Inspired
     if (argc > 1 && juce::String (argv[1]) == "--factory")
     {
         const auto error = FactoryPresets::writeAll (ChainPresets::defaultFolder());

@@ -227,7 +227,7 @@ bool HarmonizerProcessor::isBusesLayoutSupported (const BusesLayout& layouts) co
 
 void HarmonizerProcessor::prepareToPlay (double sampleRate, int)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     shifter.prepare (sampleRate, maxVoiceDelaySeconds, maxSpliceSeconds);
@@ -265,7 +265,7 @@ void HarmonizerProcessor::prepareToPlay (double sampleRate, int)
 
 void HarmonizerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

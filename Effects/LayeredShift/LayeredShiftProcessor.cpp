@@ -152,7 +152,7 @@ bool LayeredShiftProcessor::isBusesLayoutSupported (const BusesLayout& layouts) 
 
 void LayeredShiftProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate);
@@ -171,7 +171,7 @@ void LayeredShiftProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 
 void LayeredShiftProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

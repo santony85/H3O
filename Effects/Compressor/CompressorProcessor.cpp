@@ -172,7 +172,7 @@ CompressorEngine::Settings CompressorProcessor::currentSettings() const
 
 void CompressorProcessor::prepareToPlay (double sampleRate, int)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     engine.prepare (sampleRate);
     engine.setSettings (currentSettings());
     engine.reset();
@@ -181,7 +181,7 @@ void CompressorProcessor::prepareToPlay (double sampleRate, int)
 
 void CompressorProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn  = getTotalNumInputChannels();

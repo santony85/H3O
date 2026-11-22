@@ -1,4 +1,4 @@
-// Teste Simple Harmonizer complet en mode Diatonic (paramètres, presets, traitement par blocs).
+// Teste H3O Harmonizer complet en mode Diatonic (paramètres, presets, traitement par blocs).
 // Cible Xcode : HarmonizerTest
 #include "Harmonizer/HarmonizerProcessor.h"
 

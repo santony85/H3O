@@ -88,7 +88,7 @@ void ReverbEditor::paint (juce::Graphics& g)
     g.fillAll (background);
     g.setColour (juce::Colours::white);
     g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-    g.drawText ("SIMPLE REVERB", getLocalBounds().removeFromTop (40).withTrimmedLeft (15),
+    g.drawText ("H3O REVERB", getLocalBounds().removeFromTop (40).withTrimmedLeft (15),
                 juce::Justification::centredLeft);
 
     // Courbe d'extinction (en dB) : attente du pre-delay, premières réflexions, puis la queue

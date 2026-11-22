@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Target architectures")
 set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version (Xcode 27 : 12.0 minimum)")
 
-project(AudioFX VERSION 0.2.0)
+project(H3O VERSION 0.3.0)
 
 # Range les fichiers des modules JUCE dans un dossier à part dans Xcode
 set_property(GLOBAL PROPERTY USE_FOLDERS YES)
@@ -183,18 +183,18 @@ endfunction()
 #==============================================================================
 # Les plugins : chacun a sa propre cible et se compile séparément
 #==============================================================================
-add_subdirectory(Plugins/SimpleAmp)
-add_subdirectory(Plugins/SimpleDelay)
-add_subdirectory(Plugins/SimpleHarmonizer)
-add_subdirectory(Plugins/SimpleChorus)
-add_subdirectory(Plugins/SimpleReverse)
-add_subdirectory(Plugins/SimpleUltraTap)
-add_subdirectory(Plugins/SimpleBandDelay)
-add_subdirectory(Plugins/SimpleReverb)
-add_subdirectory(Plugins/SimpleLayeredShift)
-add_subdirectory(Plugins/SimpleSweptFilter)
-add_subdirectory(Plugins/SimpleCompressor)
-add_subdirectory(Chain/SimpleChain)
+add_subdirectory(Plugins/H3OAmp)
+add_subdirectory(Plugins/H3ODelay)
+add_subdirectory(Plugins/H3OHarmonizer)
+add_subdirectory(Plugins/H3OChorus)
+add_subdirectory(Plugins/H3OReverse)
+add_subdirectory(Plugins/H3OUltraTap)
+add_subdirectory(Plugins/H3OBandDelay)
+add_subdirectory(Plugins/H3OReverb)
+add_subdirectory(Plugins/H3OLayeredShift)
+add_subdirectory(Plugins/H3OSweptFilter)
+add_subdirectory(Plugins/H3OCompressor)
+add_subdirectory(Chain/H3OChain)
 
 #==============================================================================
 # Test de justesse du pitch shifter, sans JUCE : cible PitchTest
@@ -224,7 +224,7 @@ add_executable(NamTest Tests/NamTest.cpp)
 audiofx_link_nam(NamTest)
 
 #==============================================================================
-# Test de Simple Amp complet (conversion de fréquence comprise) : cible AmpTest
+# Test de H3O Amp complet (conversion de fréquence comprise) : cible AmpTest
 #==============================================================================
 juce_add_console_app(AmpTest PRODUCT_NAME "AmpTest")
 target_sources(AmpTest PRIVATE Tests/AmpTest.cpp ${AMP_SOURCES})
@@ -249,7 +249,7 @@ target_include_directories(DiatonicTest PRIVATE ${EFFECTS_DIR}/Harmonizer)
 target_compile_features(DiatonicTest PRIVATE cxx_std_17)
 
 #==============================================================================
-# Test de Simple Harmonizer complet (mode Diatonic, presets, état) : cible HarmonizerTest
+# Test de H3O Harmonizer complet (mode Diatonic, presets, état) : cible HarmonizerTest
 #==============================================================================
 juce_add_console_app(HarmonizerTest PRODUCT_NAME "HarmonizerTest")
 target_sources(HarmonizerTest PRIVATE Tests/HarmonizerTest.cpp ${HARMONIZER_SOURCES})
@@ -283,23 +283,23 @@ target_compile_features(BandDelayTest PRIVATE cxx_std_17)
 #==============================================================================
 juce_add_console_app(EditorSnapshot PRODUCT_NAME "EditorSnapshot")
 target_sources(EditorSnapshot PRIVATE Tests/EditorSnapshot.cpp
-    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp Chain/SimpleChain/ChainPresets.cpp
+    Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
     ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES})
-target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
+target_include_directories(EditorSnapshot PRIVATE ${EFFECTS_DIR} Chain/H3OChain)
 target_compile_definitions(EditorSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(EditorSnapshot)
 target_link_libraries(EditorSnapshot PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
 
 #==============================================================================
-# Tests du routage de Simple Chain (ordre, branches A / B, sessions) : cible ChainTest
+# Tests du routage de H3O Chain (ordre, branches A / B, sessions) : cible ChainTest
 #==============================================================================
 juce_add_console_app(ChainTest PRODUCT_NAME "ChainTest")
 target_sources(ChainTest PRIVATE Tests/ChainTest.cpp
-    Chain/SimpleChain/ChainProcessor.cpp Chain/SimpleChain/ChainEditor.cpp Chain/SimpleChain/ModulationPanel.cpp Chain/SimpleChain/ChainPresets.cpp Chain/SimpleChain/FactoryPresets.cpp
+    Chain/H3OChain/ChainProcessor.cpp Chain/H3OChain/ChainEditor.cpp Chain/H3OChain/ModulationPanel.cpp Chain/H3OChain/ChainPresets.cpp Chain/H3OChain/FactoryPresets.cpp
     ${AMP_SOURCES} ${HARMONIZER_SOURCES} ${REVERSE_SOURCES} ${CHORUS_SOURCES}
     ${DELAY_SOURCES} ${BANDDELAY_SOURCES} ${ULTRATAP_SOURCES} ${REVERB_SOURCES} ${LAYEREDSHIFT_SOURCES} ${SWEPTFILTER_SOURCES} ${COMPRESSOR_SOURCES})
-target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/SimpleChain)
+target_include_directories(ChainTest PRIVATE ${EFFECTS_DIR} Chain/H3OChain)
 target_compile_definitions(ChainTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 audiofx_link_nam(ChainTest)
 target_link_libraries(ChainTest PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)

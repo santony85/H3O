@@ -131,7 +131,7 @@ bool ChorusProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ChorusProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     engine.setVoices ((int) voicesParam->load());
@@ -158,7 +158,7 @@ void ChorusProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void ChorusProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

@@ -82,7 +82,7 @@ void UltraTapEditor::paint (juce::Graphics& g)
     g.fillAll (background);
     g.setColour (juce::Colours::white);
     g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-    g.drawText ("SIMPLE ULTRA-TAP", getLocalBounds().removeFromTop (40).withTrimmedLeft (15),
+    g.drawText ("H3O ULTRA-TAP", getLocalBounds().removeFromTop (40).withTrimmedLeft (15),
                 juce::Justification::centredLeft);
 
     // Les répétitions : position dans le temps, hauteur = volume,

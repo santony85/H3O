@@ -1,4 +1,4 @@
-// Teste Simple Amp complet sur un vrai fichier .nam, à 48 kHz puis à 44,1 kHz
+// Teste H3O Amp complet sur un vrai fichier .nam, à 48 kHz puis à 44,1 kHz
 // (conversion de fréquence). Cible Xcode : AmpTest
 //   ./build/Release/AmpTest "/chemin/vers/modele.nam"
 #include "Amp/AmpProcessor.h"

@@ -145,7 +145,7 @@ bool BandDelayProcessor::isBusesLayoutSupported (const BusesLayout& layouts) con
 
 void BandDelayProcessor::prepareToPlay (double sampleRate, int)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate, maxTimeMs * 0.001 + 0.05);
@@ -159,7 +159,7 @@ void BandDelayProcessor::prepareToPlay (double sampleRate, int)
 
 void BandDelayProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

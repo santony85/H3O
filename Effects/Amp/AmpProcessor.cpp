@@ -96,7 +96,7 @@ void AmpProcessor::configure (LoadedModel& m) const
 
 void AmpProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
     maxBlockSize = juce::jmax (samplesPerBlock, 32);
 
@@ -199,7 +199,7 @@ void AmpProcessor::processModel (float* data, int n)
 
 void AmpProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     // Choix de l'entrée (Stereo / Mono L / Mono R) : ensuite G et D contiennent le signal à traiter
@@ -269,7 +269,7 @@ juce::String AmpProcessor::loadModel (const juce::File& file)
     lastModelError = tryLoadModel (file);
 
     if (lastModelError.isNotEmpty())
-        std::fprintf (stderr, "Simple Amp: %s\n", lastModelError.toRawUTF8());
+        std::fprintf (stderr, "H3O Amp: %s\n", lastModelError.toRawUTF8());
 
     return lastModelError;
 }

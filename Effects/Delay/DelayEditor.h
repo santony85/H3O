@@ -39,7 +39,7 @@ private:
     juce::ComboBox presetBox;
     juce::Label infoLabel;
 
-    // Menu Input : masqué quand l'effet est dans Simple Chain (c'est la chaîne qui choisit)
+    // Menu Input : masqué quand l'effet est dans H3O Chain (c'est la chaîne qui choisit)
     std::unique_ptr<InputMode::Box> inputBox;
 
     std::unique_ptr<ButtonAttachment> syncAttachment;

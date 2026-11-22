@@ -1,7 +1,7 @@
 // Charge le vrai composant Audio Unit installé (comme Logic), lui fait lire un .nam
 // via son état, et vérifie que le son passe bien par le modèle. Cible Xcode : PluginHostTest
-//   ./PluginHostTest Samp "/chemin/modele.nam"     (Simple Amp)
-//   ./PluginHostTest Schn "/chemin/modele.nam"     (Simple Chain, Amp seul activé)
+//   ./PluginHostTest Samp "/chemin/modele.nam"     (H3O Amp)
+//   ./PluginHostTest Schn "/chemin/modele.nam"     (H3O Chain, Amp seul activé)
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <cstdio>
@@ -124,7 +124,7 @@ namespace
         }
         else
         {
-            // Simple Chain : l'état de l'Amp est rangé en base64 dans la propriété "amp"
+            // H3O Chain : l'état de l'Amp est rangé en base64 dans la propriété "amp"
             juce::MemoryBlock ampBlock;
             ampBlock.fromBase64Encoding (tree.getProperty ("amp").toString());
             auto ampXml = juce::AudioProcessor::getXmlFromBinary (ampBlock.getData(), (int) ampBlock.getSize());

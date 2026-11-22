@@ -157,7 +157,7 @@ bool SweptFilterProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
 
 void SweptFilterProcessor::prepareToPlay (double sampleRate, int)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     engine.prepare (sampleRate);
     engine.setSettings (currentSettings());
 
@@ -167,7 +167,7 @@ void SweptFilterProcessor::prepareToPlay (double sampleRate, int)
 
 void SweptFilterProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

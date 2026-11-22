@@ -126,7 +126,7 @@ bool ReverseProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ReverseProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     for (int c = 0; c < 2; ++c)
@@ -153,7 +153,7 @@ void ReverseProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void ReverseProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

@@ -49,13 +49,13 @@ private:
     Knob threshold, ratio, knee, attack;
     Knob release, sidechain, makeup, mix;
 
-    std::unique_ptr<juce::TooltipWindow> tooltips;   // seul : dans Simple Chain, la chaîne a déjà les siennes
+    std::unique_ptr<juce::TooltipWindow> tooltips;   // seul : dans H3O Chain, la chaîne a déjà les siennes
 
     juce::Rectangle<int> curveArea, meterArea;
     float shownReduction = 0.0f, peakReduction = 0.0f, shownLevel = -120.0f;
     int peakHold = 0;
 
-    // Menu Input : masqué quand l'effet est dans Simple Chain (c'est la chaîne qui choisit)
+    // Menu Input : masqué quand l'effet est dans H3O Chain (c'est la chaîne qui choisit)
     std::unique_ptr<InputMode::Box> inputBox;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompressorEditor)

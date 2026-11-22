@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-// Paramètres modulables, pour la matrice de modulation de Simple Chain.
+// Paramètres modulables, pour la matrice de modulation de H3O Chain.
 //
 // Un effet ne lit plus ses paramètres directement : il lit une « valeur effective »,
 // égale au réglage du bouton, plus un décalage posé par la matrice (0 hors de la chaîne).

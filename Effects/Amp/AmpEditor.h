@@ -45,7 +45,7 @@ private:
     juce::ToggleButton cabButton { "Cab" };
     std::unique_ptr<ButtonAttachment> normaliseAttachment, cabAttachment;
 
-    // Menu Input : masqué quand l'effet est dans Simple Chain (c'est la chaîne qui choisit)
+    // Menu Input : masqué quand l'effet est dans H3O Chain (c'est la chaîne qui choisit)
     std::unique_ptr<InputMode::Box> inputBox;
 
     std::unique_ptr<juce::FileChooser> chooser;

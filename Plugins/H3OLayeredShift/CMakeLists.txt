@@ -1,0 +1,19 @@
+# Plugin H3O Layered Shift : couches transposées, désaccordées et balayées façon H3000
+juce_add_plugin(H3OLayeredShift
+    COMPANY_NAME "H3O"
+    BUNDLE_ID "com.h3o.layeredshift"
+    PLUGIN_MANUFACTURER_CODE Anty
+    PLUGIN_CODE Slsh
+    FORMATS AU VST3 Standalone
+    PRODUCT_NAME "H3O Layered Shift"
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_OUTPUT FALSE
+    AU_MAIN_TYPE kAudioUnitType_Effect
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "H3O Layered Shift a besoin de l'entrée audio pour traiter le son de ton micro ou de ton instrument."
+    COPY_PLUGIN_AFTER_BUILD TRUE)
+
+audiofx_setup_plugin(H3OLayeredShift
+    ${CMAKE_CURRENT_SOURCE_DIR}/PluginEntry.cpp
+    ${LAYEREDSHIFT_SOURCES})

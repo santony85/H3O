@@ -87,7 +87,7 @@ void DelayEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff1e1f24));
     g.setColour (juce::Colours::white);
     g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-    g.drawText ("SIMPLE DELAY", getLocalBounds().removeFromTop (40), juce::Justification::centred);
+    g.drawText ("H3O DELAY", getLocalBounds().removeFromTop (40), juce::Justification::centred);
 }
 
 void DelayEditor::resized()

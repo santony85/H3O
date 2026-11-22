@@ -173,7 +173,7 @@ bool DelayProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void DelayProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock,
@@ -201,7 +201,7 @@ void DelayProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numSamples  = buffer.getNumSamples();

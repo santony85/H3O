@@ -145,7 +145,7 @@ bool UltraTapProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
 
 void UltraTapProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate, (maxPreDelayMs + maxLengthMs) * 0.001 + 0.05);
@@ -164,7 +164,7 @@ void UltraTapProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void UltraTapProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

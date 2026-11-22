@@ -139,7 +139,7 @@ bool ReverbProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void ReverbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     currentSampleRate = sampleRate;
 
     engine.prepare (sampleRate);
@@ -162,7 +162,7 @@ void ReverbProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    modulation.update();   // réglages + modulation de Simple Chain
+    modulation.update();   // réglages + modulation de H3O Chain
     juce::ScopedNoDenormals noDenormals;
 
     const int numIn      = getTotalNumInputChannels();

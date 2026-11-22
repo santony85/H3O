@@ -56,7 +56,7 @@ private:
 
     juce::Label rowLabels[4];
 
-    // Menu Input : masqué quand l'effet est dans Simple Chain (c'est la chaîne qui choisit)
+    // Menu Input : masqué quand l'effet est dans H3O Chain (c'est la chaîne qui choisit)
     std::unique_ptr<InputMode::Box> inputBox;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HarmonizerEditor)
