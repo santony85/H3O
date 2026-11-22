@@ -18,18 +18,18 @@
 // En C++ pur, sans JUCE, pour pouvoir le tester seul.
 namespace ChainRouting
 {
-    constexpr int numEffects = 13;
+    constexpr int numEffects = 14;
 
     // Les identifiants des effets : leur ordre d'origine dans la chaîne.
     // Ne jamais changer l'ordre ni les noms : ils sont enregistrés dans les sessions.
-    // (le compresseur, le trémolo et le phaser, arrivés plus tard, ont les derniers identifiants mais se placent
-    //  à leur place naturelle : le compresseur en tête, le phaser avant le chorus, le trémolo avant le délai)
-    enum Effect : std::uint8_t { filter, amp, harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb, compressor, tremolo, phaser };
+    // (le compresseur, le trémolo, le phaser et le flanger, arrivés plus tard, ont les derniers identifiants mais se placent
+    //  à leur place naturelle : le compresseur en tête, le phaser et le flanger avant le chorus, le trémolo avant le délai)
+    enum Effect : std::uint8_t { filter, amp, harmonizer, reverse, layered, chorus, delay, bandDelay, ultraTap, reverb, compressor, tremolo, phaser, flanger };
 
     inline const std::array<const char*, numEffects>& keys()
     {
         static const std::array<const char*, numEffects> k {
-            "filter", "amp", "harmonizer", "reverse", "layered", "chorus", "delay", "banddelay", "ultratap", "reverb", "compressor", "tremolo", "phaser"
+            "filter", "amp", "harmonizer", "reverse", "layered", "chorus", "delay", "banddelay", "ultratap", "reverb", "compressor", "tremolo", "phaser", "flanger"
         };
         return k;
     }
@@ -51,7 +51,7 @@ namespace ChainRouting
         static Routing series()
         {
             static constexpr std::uint8_t signalOrder[numEffects] {
-                compressor, filter, amp, harmonizer, reverse, layered, phaser, chorus, tremolo, delay, bandDelay, ultraTap, reverb
+                compressor, filter, amp, harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap, reverb
             };
             Routing r;
             for (int i = 0; i < numEffects; ++i)
@@ -124,44 +124,72 @@ namespace ChainRouting
             rebuildOrder (lanes);
         }
 
-        // Tient dans 64 bits : 13 × 4 bits pour l'ordre, puis le nombre d'effets dans Avant, A et B (4 bits chacun).
-        // (64 bits pleins avec 13 effets : un 14e demandera un autre format)
+        // Tient dans 64 bits : l'ordre codé comme une permutation (code de Lehmer : 14! < 2^37, sur 40 bits),
+        // puis le nombre d'effets dans Avant, A et B (5 bits chacun, à partir du bit 40), et un bit de validité (le 63e) :
+        // 0 n'est jamais un routage.
         // L'ordre étant rangé section par section, les sections se déduisent de ces nombres.
         // Permet de le passer au fil audio dans un seul std::atomic<uint64_t>.
+        static constexpr int countShift = 40, countBits = 5;
+        static constexpr std::uint64_t validBit = std::uint64_t (1) << 63;
+
+        static constexpr std::uint64_t permutations()
+        {
+            std::uint64_t f = 1;
+            for (int i = 2; i <= numEffects; ++i)
+                f *= (std::uint64_t) i;
+            return f;
+        }
+
         std::uint64_t pack() const
         {
             Routing r = *this;
             r.normalise();
 
-            std::uint64_t v = 0;
+            std::uint64_t code = 0;
+            bool used[numEffects] = {};
             int counts[numLanes] = {};
             for (int i = 0; i < numEffects; ++i)
             {
-                v |= (std::uint64_t) (r.order[(size_t) i] & 15) << (4 * i);
-                ++counts[r.lane[(size_t) i] & 3];
+                const int e = r.order[(size_t) i];
+                int rank = 0;
+                for (int k = 0; k < e; ++k)
+                    rank += used[k] ? 0 : 1;
+                used[e] = true;
+                code = code * (std::uint64_t) (numEffects - i) + (std::uint64_t) rank;
+                ++counts[r.lane[(size_t) e] & 3];
             }
             for (int l = 0; l < 3; ++l)
-                v |= (std::uint64_t) (counts[l] & 15) << (4 * numEffects + 4 * l);
-            return v;
+                code |= (std::uint64_t) counts[l] << (countShift + countBits * l);
+            return code | validBit;
         }
 
         static Routing unpack (std::uint64_t v)
         {
-            Routing r;
-            unsigned seen = 0;
-            for (int i = 0; i < numEffects; ++i)
-            {
-                r.order[(size_t) i] = (std::uint8_t) ((v >> (4 * i)) & 15);
-                if (r.order[(size_t) i] < numEffects)
-                    seen |= 1u << r.order[(size_t) i];
-            }
-
+            std::uint64_t code = v & ((std::uint64_t (1) << countShift) - 1);
             int counts[3];
             for (int l = 0; l < 3; ++l)
-                counts[l] = (int) ((v >> (4 * numEffects + 4 * l)) & 15);
-
-            if (seen != (1u << numEffects) - 1 || counts[0] + counts[1] + counts[2] > numEffects)
+                counts[l] = (int) ((v >> (countShift + countBits * l)) & ((1u << countBits) - 1));
+            if ((v & validBit) == 0 || code >= permutations() || counts[0] + counts[1] + counts[2] > numEffects)
                 return series();
+
+            // Les rangs, du dernier au premier, puis les effets pris parmi ceux qui restent
+            int ranks[numEffects];
+            for (int i = numEffects - 1; i >= 0; --i)
+            {
+                ranks[i] = (int) (code % (std::uint64_t) (numEffects - i));
+                code /= (std::uint64_t) (numEffects - i);
+            }
+            Routing r;
+            bool used[numEffects] = {};
+            for (int i = 0; i < numEffects; ++i)
+            {
+                int e = 0;
+                for (int remaining = ranks[i];; ++e)
+                    if (! used[e] && remaining-- == 0)
+                        break;
+                used[e] = true;
+                r.order[(size_t) i] = (std::uint8_t) e;
+            }
 
             int position = 0;
             for (int l = 0; l < numLanes; ++l)
@@ -290,20 +318,20 @@ namespace ChainRouting
               Routing::series() },
             // Les hauteurs d'un côté, les échos de l'autre : chacun garde sa netteté
             { "Pitch | Delays",
-              make ({ compressor, filter, amp }, { harmonizer, reverse, layered }, { phaser, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
+              make ({ compressor, filter, amp }, { harmonizer, reverse, layered }, { phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
             // Le son sec garde son attaque, les effets s'ajoutent à côté
             { "Dry | Effects",
-              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, phaser, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
+              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap }, { reverb }) },
             // Échos et réverbération en parallèle : la réverbe ne brouille pas les répétitions
             { "Delays | Reverb",
-              make ({ compressor, filter, amp, harmonizer, reverse, layered, phaser, chorus, tremolo }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
+              make ({ compressor, filter, amp, harmonizer, reverse, layered, phaser, flanger, chorus, tremolo }, { delay, bandDelay, ultraTap }, { reverb }, {}) },
             // Le rack de Bob Bradshaw : le son sec de l'ampli au centre, les effets à 100 % autour.
             // Choisi dans le menu, il allume aussi « Wet Only » (branche B sans son sec)
             { "Wet/Dry/Wet",
-              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, phaser, chorus, tremolo, delay, bandDelay, ultraTap, reverb }, {}) },
+              make ({ compressor, filter, amp }, {}, { harmonizer, reverse, layered, phaser, flanger, chorus, tremolo, delay, bandDelay, ultraTap, reverb }, {}) },
             // Deux harmonies différentes, une à gauche et une à droite (avec Spread)
             { "Harmonizer | Layered",
-              make ({ compressor, filter, amp }, { harmonizer, phaser, chorus }, { layered, reverse }, { tremolo, delay, bandDelay, ultraTap, reverb }) },
+              make ({ compressor, filter, amp }, { harmonizer, phaser, flanger, chorus }, { layered, reverse }, { tremolo, delay, bandDelay, ultraTap, reverb }) },
         };
         return list;
     }

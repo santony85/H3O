@@ -10,6 +10,7 @@
 #include "Compressor/CompressorEditor.h"
 #include "Tremolo/TremoloEditor.h"
 #include "Phaser/PhaserEditor.h"
+#include "Flanger/FlangerEditor.h"
 
 #include <cstdio>
 
@@ -71,6 +72,12 @@ int main (int argc, char** argv)
         PhaserProcessor fx;
         std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
         save (*editor, folder.getChildFile ("Phaser.png"));
+    }
+
+    {
+        FlangerProcessor fx;
+        std::unique_ptr<juce::AudioProcessorEditor> editor (fx.createEditor());
+        save (*editor, folder.getChildFile ("Flanger.png"));
     }
 
     {

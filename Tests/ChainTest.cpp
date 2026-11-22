@@ -991,8 +991,8 @@ namespace
         const auto s = Routing::series();
         const auto pre0 = s.effectsIn (pre);
         const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
-        check (at (phaser) == at (layered) + 1 && at (chorus) == at (phaser) + 1, "en série : Layered → Phaser → Chorus");
-        check (Routing::unpack (s.pack()) == s, "13 effets : le routage tient toujours dans 64 bits");
+        check (at (phaser) == at (layered) + 1 && at (chorus) > at (phaser), "en série : Layered → Phaser, avant le Chorus");
+        check (Routing::unpack (s.pack()) == s, "le routage tient toujours dans 64 bits");
 
         ChainProcessor chain;
         onlyOn (chain, { phaser });
@@ -1030,6 +1030,76 @@ namespace
         reopened.setStateInformation (session.getData(), (int) session.getSize());
         check (std::abs (reopened.phaser.parameters.getRawParameterValue ("feedback")->load() + 40.0f) < 0.05f
                && reopened.isEffectOn (phaser), "la session retrouve le phaser et ses réglages");
+    }
+
+    void flangerInChain()
+    {
+        using namespace ChainRouting;
+        std::printf ("\n--- Flanger dans la chaîne ---\n");
+
+        const auto s = Routing::series();
+        const auto pre0 = s.effectsIn (pre);
+        const auto at = [&pre0] (int e) { return std::find (pre0.begin(), pre0.end(), e) - pre0.begin(); };
+        check (at (flanger) == at (phaser) + 1 && at (chorus) == at (flanger) + 1, "en série : Phaser → Flanger → Chorus");
+
+        // 14 effets : toutes les permutations restent codées dans 64 bits (au hasard, et l'ordre inverse)
+        bool roundTrip = true;
+        juce::Random random (7);
+        for (int n = 0; n < 2000; ++n)
+        {
+            std::array<std::vector<int>, numLanes> lanes;
+            std::vector<int> all;
+            for (int e = 0; e < numEffects; ++e)
+                all.push_back (e);
+            for (int i = numEffects - 1; i > 0; --i)
+                std::swap (all[(size_t) i], all[(size_t) random.nextInt (i + 1)]);
+            for (auto e : all)
+                lanes[(size_t) random.nextInt (numLanes)].push_back (e);
+            const auto r = make (lanes[0], lanes[1], lanes[2], lanes[3]);
+            roundTrip = roundTrip && Routing::unpack (r.pack()) == r;
+        }
+        check (roundTrip, "14 effets : 2000 routages au hasard, codés puis relus à l'identique");
+
+        ChainProcessor chain;
+        onlyOn (chain, { flanger });
+        auto set = [&chain] (const char* id, float value)
+        {
+            auto* param = chain.flanger.parameters.getParameter (id);
+            param->setValueNotifyingHost (param->convertTo0to1 (value));
+        };
+        set ("depth", 0.0f);      // peigne figé : retard de 1 ms, creux à 500 Hz
+        set ("manual", 1.0f);
+        set ("feedback", 0.0f);
+        chain.prepareToPlay (48000.0, 512);
+
+        auto levelAt = [&chain] (float hz)
+        {
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            double sum = 0.0;
+            for (int block = 0; block < 60; ++block)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 512; ++i)
+                        buffer.setSample (ch, i, 0.5f * std::sin (2.0f * 3.14159265f * hz * (float) (block * 512 + i) / 48000.0f));
+                chain.processBlock (buffer, midi);
+                if (block >= 30)
+                    for (int i = 0; i < 512; ++i)
+                        sum += (double) buffer.getSample (0, i) * buffer.getSample (0, i);
+            }
+            return 20.0 * std::log10 (std::sqrt (sum / (30.0 * 512.0)) / 0.35355);
+        };
+        const double notch = levelAt (500.0f), pass = levelAt (1000.0f);
+        std::printf ("  500 Hz %.1f dB, 1 kHz %.1f dB\n", notch, pass);
+        check (notch < -25.0 && pass > -1.0, "le flanger creuse le son aux bonnes fréquences");
+
+        set ("feedback", -60.0f);
+        juce::MemoryBlock session;
+        chain.getStateInformation (session);
+        ChainProcessor reopened;
+        reopened.setStateInformation (session.getData(), (int) session.getSize());
+        check (std::abs (reopened.flanger.parameters.getRawParameterValue ("feedback")->load() + 60.0f) < 0.05f
+               && reopened.isEffectOn (flanger), "la session retrouve le flanger et ses réglages");
     }
 
     // La baie de brassage : câbles libres, mélangeurs, boucles, sessions
@@ -1352,6 +1422,7 @@ int main (int argc, char** argv)
     compressorInChain();
     tremoloInChain();
     phaserInChain();
+    flangerInChain();
     patchBay();
     factoryPresets();
 
