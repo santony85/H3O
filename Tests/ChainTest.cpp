@@ -767,7 +767,7 @@ namespace
         int h3000 = 0;
         for (int i = 0; i < FactoryPresets::count(); ++i)
             h3000 += FactoryPresets::bank (i) == FactoryPresets::folderName ? 1 : 0;
-        check (h3000 == 100 && FactoryPresets::count() == 268, "100 presets H3000 Inspired + 112 Multi-FX + 56 Patch Bay");
+        check (h3000 == 100 && FactoryPresets::count() == 286, "100 presets H3000 Inspired + 124 Multi-FX + 62 Patch Bay");
 
         juce::StringArray paths;
         for (int i = 0; i < FactoryPresets::count(); ++i)
@@ -786,7 +786,7 @@ namespace
         ChainProcessor chain;
         chain.presets.setFolder (folder);
         const auto files = chain.presets.list();
-        check (files.size() == 268, "268 fichiers, sous-dossiers compris");
+        check (files.size() == 286, "286 fichiers, sous-dossiers compris");
 
         // Ton Amp reste : allumé, avec son état (modèle, IR)
         setParam (chain, "ampon", 1.0f);
@@ -798,7 +798,7 @@ namespace
         check (chain.presetName.startsWith (juce::String (FactoryPresets::folderName) + "/") && chain.presets.current() == files[0],
                "le nom du preset est son chemin (catégorie comprise)");
         check (chain.presets.neighbour (1) == files[1] && chain.presets.neighbour (-1) == files.getLast(), "précédent / suivant à travers les catégories");
-        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 268,
+        check (chain.presets.saveTo (chain.presets.current()).isEmpty() && chain.presets.list().size() == 286,
                "Save réenregistre le preset dans son sous-dossier");
         check (chain.presets.saveTo (folder.getParentDirectory().getChildFile ("x.scpreset")).isNotEmpty(), "pas d'écriture hors du dossier");
 
@@ -851,7 +851,7 @@ namespace
         std::printf ("  %d presets en branches parallèles, %d avec modulation\n", parallel, modulated);
         check (parallel >= files.size() - 5, "presque tous les presets utilisent les branches A / B");
         std::printf ("  %d rigs câblés, dont %d à plusieurs splits\n", patchRigs, multiSplit);
-        check (patchRigs == 56 && complexRigs == 56 && multiSplit >= 34, "Patch Bay : 56 rigs câblés, splits et modulations");
+        check (patchRigs == 62 && complexRigs == 62 && multiSplit >= 38, "Patch Bay : 62 rigs câblés, splits et modulations");
 
         int bad = 0;
         float lowest = 100.0f, highest = -100.0f;

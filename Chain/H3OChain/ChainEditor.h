@@ -66,6 +66,7 @@ private:
     struct Drop
     {
         int lane = ChainRouting::pre, index = 0;
+        bool off = false;   // sur l'étagère des pédales coupées
     };
 
     void addPedal (const juce::String& name, juce::Colour);
@@ -94,6 +95,9 @@ private:
     Drop findDrop (juce::Point<int>) const;
     float markerX (const Drop&) const;
     int rowY (int lane) const;   // centre vertical de la rangée d'une section
+    std::vector<int> chainList (int lane) const;   // les pédales allumées d'une section (les coupées sont sur l'étagère)
+    std::uint32_t onMask() const;
+    void setEffectOn (int effect, bool on);
 
     // Assombrit les réglages des effets coupés, suit les changements de routage (session rechargée)
     void timerCallback() override;
@@ -181,6 +185,8 @@ private:
     // Schéma : routage affiché, séparation et fusion des branches, cases des branches vides
     ChainRouting::Routing shown = ChainRouting::Routing::series();
     juce::Rectangle<int> diagram, emptyA, emptyB;
+    juce::Rectangle<int> shelf;          // rangée du haut : les pédales coupées, hors de la chaîne
+    std::uint32_t shownOnMask = 0;
     int splitX = 0, mergeX = 0;
 
     // Glisser-déposer
@@ -192,7 +198,9 @@ private:
     static constexpr int nameHeight     = 24;
     static constexpr int cellHeight     = 44;   // nom + interrupteur
     static constexpr int rowGap         = 8;
-    static constexpr int diagramHeight  = 3 * cellHeight + 2 * rowGap + 16;
+    static constexpr int shelfHeight    = cellHeight + 14;
+    static constexpr int shelfLabelWidth = 40;
+    static constexpr int diagramHeight  = shelfHeight + 3 * cellHeight + 2 * rowGap + 16;
     static constexpr int controlsHeight = 30;   // Balance, Spread, Cross Feedback
     static constexpr int laneStripHeight = diagramHeight + controlsHeight + 6;
     static constexpr int patchDiagramHeight = 340;

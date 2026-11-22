@@ -610,17 +610,73 @@ void ChainEditor::mouseUp (const juce::MouseEvent& e)
 
     if (diagram.expanded (20).contains (e.getEventRelativeTo (this).getPosition()))
     {
-        auto r = shown;
-        r.move (effect, drop.lane, drop.index);
-        applyRouting (r);
+        if (drop.off)
+        {
+            // Sur l'étagère : la pédale est coupée, sa place dans le routage ne change pas
+            setEffectOn (effect, false);
+        }
+        else
+        {
+            // La place choisie parmi les pédales allumées, traduite en place parmi toutes les pédales de la section
+            std::vector<int> all, visible;
+            for (auto x : shown.effectsIn (drop.lane))
+                if (x != effect)
+                    all.push_back (x);
+            for (auto x : chainList (drop.lane))
+                if (x != effect)
+                    visible.push_back (x);
+
+            auto positionOf = [&all] (int x) { return (int) (std::find (all.begin(), all.end(), x) - all.begin()); };
+            int index = (int) all.size();
+            if (drop.index < (int) visible.size())
+                index = positionOf (visible[(size_t) drop.index]);
+            else if (! visible.empty())
+                index = positionOf (visible.back()) + 1;
+
+            auto r = shown;
+            r.move (effect, drop.lane, index);
+            setEffectOn (effect, true);
+            applyRouting (r);
+        }
     }
 
+    layoutDiagram();
     repaint();
+}
+
+std::vector<int> ChainEditor::chainList (int lane) const
+{
+    std::vector<int> list;
+    for (auto e : shown.effectsIn (lane))
+        if (chain.isEffectOn (e))
+            list.push_back (e);
+    return list;
+}
+
+std::uint32_t ChainEditor::onMask() const
+{
+    std::uint32_t mask = 0;
+    for (int e = 0; e < (int) pedals.size(); ++e)
+        if (chain.isEffectOn (e))
+            mask |= 1u << e;
+    return mask;
+}
+
+void ChainEditor::setEffectOn (int effect, bool on)
+{
+    if (chain.isEffectOn (effect) == on)
+        return;
+    if (auto* p = chain.parameters.getParameter (ChainProcessor::onParamId (effect)))
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        p->endChangeGesture();
+    }
 }
 
 int ChainEditor::rowY (int lane) const
 {
-    const int top = diagram.getY() + 8;
+    const int top = diagram.getY() + 8 + shelfHeight;
     const int row = lane == ChainRouting::branchA ? 0 : (lane == ChainRouting::branchB ? 2 : 1);
     return top + row * (cellHeight + rowGap) + nameHeight / 2;
 }
@@ -629,6 +685,12 @@ ChainEditor::Drop ChainEditor::findDrop (juce::Point<int> p) const
 {
     // La rangée la plus proche : A en haut, la série au milieu, B en bas
     Drop d;
+    if (p.y < shelf.getBottom() + rowGap / 2)
+    {
+        d.off = true;
+        return d;
+    }
+
     const int distA = std::abs (p.y - rowY (ChainRouting::branchA));
     const int distM = std::abs (p.y - rowY (ChainRouting::pre));
     const int distB = std::abs (p.y - rowY (ChainRouting::branchB));
@@ -642,7 +704,7 @@ ChainEditor::Drop ChainEditor::findDrop (juce::Point<int> p) const
 
     // La place : après chaque pédale de la section dont le centre est à gauche du pointeur
     d.index = 0;
-    for (auto e : shown.effectsIn (d.lane))
+    for (auto e : chainList (d.lane))
         if (e != dragging && pedals[(size_t) e].cell.getCentreX() < p.x)
             ++d.index;
 
@@ -652,7 +714,7 @@ ChainEditor::Drop ChainEditor::findDrop (juce::Point<int> p) const
 float ChainEditor::markerX (const Drop& d) const
 {
     std::vector<int> list;
-    for (auto e : shown.effectsIn (d.lane))
+    for (auto e : chainList (d.lane))
         if (e != dragging)
             list.push_back (e);
 
@@ -696,10 +758,11 @@ void ChainEditor::timerCallback()
 
     // Routage changé ailleurs (session rechargée, automation…)
     const auto current = chain.getRouting();
-    if (current != shown && dragging < 0 && ! patchView)
+    if ((current != shown || onMask() != shownOnMask) && dragging < 0 && ! patchView)
     {
         shown = current;
         layoutDiagram();
+        repaint();
     }
 
     const float branchAlpha = shown.hasParallel() ? 1.0f : 0.4f;
@@ -732,6 +795,23 @@ void ChainEditor::paint (juce::Graphics& g)
         return;
     }
 
+    // L'étagère des pédales coupées, au-dessus de la chaîne : hors du signal
+    {
+        g.setColour (juce::Colour (0xff15161a));
+        g.fillRoundedRectangle (shelf.toFloat(), 4.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.45f));
+        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.drawText ("OFF", shelf.withWidth (shelfLabelWidth), juce::Justification::centred);
+        if ((onMask() | (dragging >= 0 ? 1u << dragging : 0u)) == (1u << pedals.size()) - 1u)
+        {
+            g.setFont (juce::FontOptions (11.0f));
+            g.drawText ("Switched-off pedals wait here, out of the chain. Drag a pedal here to switch it off.",
+                        shelf.withTrimmedLeft (shelfLabelWidth + 8), juce::Justification::centredLeft);
+        }
+        g.setColour (juce::Colours::white.withAlpha (0.08f));
+        g.drawHorizontalLine (shelf.getBottom() + 3, (float) diagram.getX() + 6.0f, (float) diagram.getRight() - 6.0f);
+    }
+
     const bool parallel = shown.hasParallel();
     const float yA = (float) rowY (ChainRouting::branchA);
     const float yM = (float) rowY (ChainRouting::pre);
@@ -758,7 +838,7 @@ void ChainEditor::paint (juce::Graphics& g)
     // Une section : flèches entre ses pédales, et entrée / sortie aux deux bouts
     auto drawLane = [&] (int lane, float y, float startX, float endX, juce::Colour c)
     {
-        const auto list = shown.effectsIn (lane);
+        const auto list = chainList (lane);
         if (list.empty())
             return;
 
@@ -773,8 +853,8 @@ void ChainEditor::paint (juce::Graphics& g)
     };
 
     // Avant la séparation et après la fusion
-    const auto preList  = shown.effectsIn (ChainRouting::pre);
-    const auto postList = shown.effectsIn (ChainRouting::post);
+    const auto preList  = chainList (ChainRouting::pre);
+    const auto postList = chainList (ChainRouting::post);
     drawLane (ChainRouting::pre, yM, left, (float) splitX, wire);
 
     if (postList.empty())
@@ -800,9 +880,9 @@ void ChainEditor::paint (juce::Graphics& g)
         for (auto [lane, y, empty, colour] : { std::tuple { (int) ChainRouting::branchA, yA, emptyA, colourA },
                                                std::tuple { (int) ChainRouting::branchB, yB, emptyB, colourB } })
         {
-            if (shown.effectsIn (lane).empty())
+            if (chainList (lane).empty())
             {
-                // Branche vide : le son passe sec
+                // Branche vide (ou pédales toutes coupées) : le son passe sec
                 arrow ((float) splitX, y, (float) mergeX - 2.0f, colour.withAlpha (0.8f));
                 g.setColour (colour.withAlpha (0.8f));
                 g.setFont (juce::FontOptions (11.0f));
@@ -885,15 +965,23 @@ void ChainEditor::paintOverChildren (juce::Graphics& g)
 
     const auto& pedal = pedals[(size_t) dragging];
 
-    // Où la pédale va se poser
-    const float x = markerX (drop);
-    const float y = (float) rowY (drop.lane);
-    g.setColour (pedal.colour);
-    g.fillRoundedRectangle (x - 2.0f, y - cellHeight * 0.5f, 4.0f, (float) cellHeight - 4.0f, 2.0f);
+    // Où la pédale va se poser : sur l'étagère (coupée) ou dans une section de la chaîne
+    if (drop.off)
+    {
+        g.setColour (pedal.colour);
+        g.drawRoundedRectangle (shelf.toFloat().reduced (1.0f), 4.0f, 2.0f);
+    }
+    else
+    {
+        const float x = markerX (drop);
+        const float y = (float) rowY (drop.lane);
+        g.setColour (pedal.colour);
+        g.fillRoundedRectangle (x - 2.0f, y - cellHeight * 0.5f, 4.0f, (float) cellHeight - 4.0f, 2.0f);
 
-    g.setFont (juce::FontOptions (11.0f));
-    g.drawText (laneName (drop.lane), juce::Rectangle<float> (x - 50.0f, y + cellHeight * 0.5f - 2.0f, 100.0f, 13.0f),
-                juce::Justification::centred);
+        g.setFont (juce::FontOptions (11.0f));
+        g.drawText (laneName (drop.lane), juce::Rectangle<float> (x - 50.0f, y + cellHeight * 0.5f - 2.0f, 100.0f, 13.0f),
+                    juce::Justification::centred);
+    }
 
     // La pédale qui suit la souris
     const auto ghost = pedal.cell.withHeight (nameHeight).withCentre (dragPos).toFloat();
@@ -911,16 +999,17 @@ void ChainEditor::layoutDiagram()
 {
     using namespace ChainRouting;
 
-    const auto preList  = shown.effectsIn (pre);
-    const auto aList    = shown.effectsIn (branchA);
-    const auto bList    = shown.effectsIn (branchB);
-    const auto postList = shown.effectsIn (post);
+    const auto preList  = chainList (pre);
+    const auto aList    = chainList (branchA);
+    const auto bList    = chainList (branchB);
+    const auto postList = chainList (post);
+    shownOnMask = onMask();
 
     const int nPre = (int) preList.size(), nPost = (int) postList.size();
     const int nPar = juce::jmax ((int) aList.size(), (int) bList.size(), 1);   // une case au moins, pour y glisser des pédales
 
     // Largeur des pédales : tout le schéma tient, sans devenir démesuré quand il y a peu de colonnes
-    const auto area = diagram.reduced (diagramMargin, 8);
+    const auto area = diagram.withTrimmedTop (shelfHeight).reduced (diagramMargin, 8);
     const int columns = nPre + nPar + nPost;
     const int gaps = juce::jmax (0, nPre - 1) + juce::jmax (0, nPar - 1) + juce::jmax (0, nPost - 1);
     const int width = juce::jlimit (minPedalWidth, maxPedalWidth,
@@ -965,6 +1054,31 @@ void ChainEditor::layoutDiagram()
     {
         place (postList[(size_t) i], x, post);
         x += width + arrowWidth;
+    }
+
+    // L'étagère : les pédales coupées, dans l'ordre du routage
+    shelf = diagram.withHeight (shelfHeight).reduced (diagramMargin, 4).translated (0, 2);
+    std::vector<int> offList;
+    for (int lane = 0; lane < numLanes; ++lane)
+        for (auto e : shown.effectsIn (lane))
+            if (! chain.isEffectOn (e))
+                offList.push_back (e);
+
+    if (! offList.empty())
+    {
+        constexpr int gap = 6;
+        const int n = (int) offList.size();
+        const int room = shelf.getWidth() - shelfLabelWidth - 8;
+        const int w = juce::jlimit (56, maxPedalWidth, (room - (n - 1) * gap) / n);
+        int sx = shelf.getX() + shelfLabelWidth + 4;
+        for (auto e : offList)
+        {
+            auto& pedal = pedals[(size_t) e];
+            pedal.cell = { sx, shelf.getY() + 2, w, cellHeight };
+            pedal.selectButton->setBounds (pedal.cell.withHeight (nameHeight));
+            pedal.onButton->setBounds (pedal.cell.withTrimmedTop (nameHeight).withSizeKeepingCentre (56, cellHeight - nameHeight));
+            sx += w + gap;
+        }
     }
 
     routingButton.setButtonText ("Routing: " + routingName() + "  " + juce::String::fromUTF8 ("\xe2\x96\xbe"));

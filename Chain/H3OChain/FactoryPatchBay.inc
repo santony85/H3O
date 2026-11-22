@@ -464,6 +464,45 @@
               { { envelope, "flanger/manual", 30 } },
               "input>compressor.0 compressor>amp.0 amp>filter.0 filter>mixer1.0 filter>flanger.0 flanger>mixer1.1 "
               "mixer1>delay.0 mixer1>mixer2.0 delay>mixer2.1 mixer2>output.0" },
+
+            //==================================================================
+            // Réseaux de whammy : la note transposée dans ses propres chemins, splits et boucles
+            { "Whammy Networks", "Octave Split",
+              { wet (whammy, 2, { { "pedal", 100 } }), wet (delay, 9), fx (reverb, 1, { { "mix", 15 } }) },
+              mixer (1, 60, 80, -40, 20) + mixer (2, 85, 40) + lfo (1, 0.1f, sine),
+              { { lfo1, "branches/mix1pana", 40 } },
+              "input>amp.0 amp>whammy.0 amp>mixer1.1 whammy>mixer1.0 whammy>delay.0 delay>mixer2.1 mixer1>mixer2.0 "
+              "mixer2>reverb.0 reverb>output.0" },
+            { "Whammy Networks", "Harmony Tree (5th to Octave)",
+              { wet (whammy, 7), wet (chorus, 2), wet (delay, 9), fx (reverb, 4, { { "mix", 20 } }) },
+              mixer (1, 85, 55) + mixer (2, 55, 50, -60, 60) + env (10, 300),
+              { { envelope, "whammy/pedal", 70 } },
+              "input>amp.0 amp>whammy.0 whammy>chorus.0 whammy>delay.0 chorus>mixer2.0 delay>mixer2.1 "
+              "amp>mixer1.0 mixer2>mixer1.1 mixer1>reverb.0 reverb>output.0" },
+            { "Whammy Networks", "Octave Climb Loop",
+              { wet (delay, 4), wet (whammy, 8), fx (reverb, 6, { { "mix", 25 } }) },
+              mixer (1, 100, 35) + mixer (2, 85, 50) + lfo (1, 0.08f, sine),
+              { { lfo1, "branches/mix1levelb", 15 } },
+              "input>amp.0 amp>mixer1.0 mixer1>delay.0 delay>whammy.0 whammy>mixer1.1 "
+              "amp>mixer2.0 delay>mixer2.1 mixer2>reverb.0 reverb>output.0" },
+            { "Whammy Networks", "Detune Wide Wall",
+              { wet (whammy, 11), wet (chorus, 1), wet (reverb, 6) },
+              mixer (1, 55, 55, -70, 70) + mixer (2, 85, 60) + mixer (3, 85, 35) + lfo (1, 0.07f, triangle),
+              { { lfo1, "whammy/detune", 20 } },
+              "input>amp.0 amp>whammy.0 amp>chorus.0 whammy>mixer1.0 chorus>mixer1.1 amp>mixer2.0 mixer1>mixer2.1 "
+              "mixer2>mixer3.0 mixer2>reverb.0 reverb>mixer3.1 mixer3>output.0" },
+            { "Whammy Networks", "Dive & Reverse",
+              { wet (whammy, 3), wet (reverse, 0), wet (delay, 5), fx (reverb, 3, { { "mix", 20 } }) },
+              mixer (1, 85, 55) + mixer (2, 55, 50, -60, 60) + lfoSync (1, bars2, sawDown),
+              { { lfo1, "whammy/pedal", 100 } },
+              "input>amp.0 amp>whammy.0 whammy>reverse.0 whammy>delay.0 reverse>mixer2.0 delay>mixer2.1 "
+              "amp>mixer1.0 mixer2>mixer1.1 mixer1>reverb.0 reverb>output.0" },
+            { "Whammy Networks", "Octave Trill Duet",
+              { wet (whammy, 0, { { "glide", 5 } }), wet (phaser, 6), fx (delay, 9, { { "mix", 25 } }) },
+              mixer (1, 55, 55, -60, 60) + mixer (2, 85, 55) + lfoSync (1, l8, square),
+              { { lfo1, "whammy/pedal", 100 } },
+              "input>amp.0 amp>whammy.0 amp>phaser.0 whammy>mixer1.0 phaser>mixer1.1 amp>mixer2.0 mixer1>mixer2.1 "
+              "mixer2>delay.0 delay>output.0" },
         };
         return list;
     }
